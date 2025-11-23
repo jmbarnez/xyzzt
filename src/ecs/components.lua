@@ -22,7 +22,7 @@ end)
 -- [UPDATED] Input now stores the *state* of controls, not just the tag
 Concord.component("input", function(c)
     c.thrust = false
-    c.turn = 0  -- -1 (left), 0 (none), 1 (right)
+    c.turn = 0 -- -1 (left), 0 (none), 1 (right)
     c.fire = false
     c.move_x = 0
     c.move_y = 0
@@ -151,3 +151,11 @@ Concord.component("magnet", function(c, radius, force)
 end)
 
 -- Collision layers for spatial grid
+
+Concord.component("trail", function(c, length, width, color)
+    c.length = length or 0.5 -- Duration in seconds
+    c.width = width or 10
+    c.color = color or { 0, 1, 1, 1 }
+    c.points = {} -- List of {x, y, time}
+    c.mesh = nil  -- Love2D mesh
+end)

@@ -9,6 +9,8 @@ extern vec2 flow;
 extern number alphaScale;
 extern vec3 colorA;
 extern vec3 colorB;
+extern number distortion;
+extern number densityScale;
 
 float hash(vec2 p) {
     p = vec2(dot(p, vec2(137.1, 311.7)), dot(p, vec2(269.5, 183.3)));
@@ -56,6 +58,8 @@ vec4 effect(vec4 vcolor, Image tex, vec2 texcoord, vec2 screen_coords) {
     vec2 centered = (uv - 0.5) * 2.0;
 
     vec2 ncoord = uv * noiseScale + offset * 0.00005;
+    // Apply distortion to the coordinate space
+    ncoord += vec2(sin(ncoord.y * 4.0 + time * 0.1), cos(ncoord.x * 4.0 + time * 0.1)) * distortion;
     ncoord += flow * time * 0.8;
 
     // Multiple fbm layers with different scales and motion
@@ -83,7 +87,7 @@ vec4 effect(vec4 vcolor, Image tex, vec2 texcoord, vec2 screen_coords) {
     mask = smoothstep(0.25, 0.80, mask);
 
     density = pow(max(density, 0.0), 1.6);
-    density *= mask;
+    density *= mask * densityScale;
 
     // Subtle temporal pulsing in brightness
     float pulse = 0.15 * sin(time * 0.25) + 0.85;
@@ -118,7 +122,8 @@ vec4 effect(vec4 vcolor, Image tex, vec2 texcoord, vec2 screen_coords) {
     color = clamp(color, 0.0, 1.0);
     float luma = dot(color, vec3(0.299, 0.587, 0.114));
     color = mix(vec3(luma), color, 1.25);   // saturation
-    color = mix(vec3(0.04, 0.05, 0.10), color, 1.05); // mix with deep space tint
+    // Reduced deep space tint to be more neutral/black, allowing the nebula colors to pop
+    color = mix(vec3(0.0, 0.0, 0.02), color, 1.05); 
 
     return vec4(color, alpha) * vcolor;
 }

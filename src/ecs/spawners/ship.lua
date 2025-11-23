@@ -40,6 +40,8 @@ function ShipManager.spawn(world, ship_def, x, y, is_host_player)
     if is_host_player then
         ship:give("name", Config.PLAYER_NAME or "Player")
         ship:give("pilot")
+        -- Add engine trail
+        ship:give("trail", 0.6, 12, { 0, 1, 1, 1 })
     end
 
     ship:give("input")

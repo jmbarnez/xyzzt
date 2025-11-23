@@ -2,7 +2,7 @@ local Concord = require "concord"
 local EntityUtils = require "src.utils.entity_utils"
 
 local ItemPickupSystem = Concord.system({
-    pool = {"item", "physics"}
+    pool = { "item", "physics" }
 })
 
 
@@ -15,16 +15,16 @@ local ItemPickupSystem = Concord.system({
 -- Helper function to process item collection
 local function collect_item(item, collector)
     if not (item and collector) then return end
-    
+
     local itemComp = item.item
     if not itemComp then return end
-    
+
     if itemComp.name == "Stone" then
         -- Try to add to cargo
         if collector.cargo then
             local cargo = collector.cargo
             local item_vol = itemComp.volume or 1.0
-            
+
             if (cargo.current + item_vol) <= cargo.capacity then
                 cargo.current = cargo.current + item_vol
                 cargo.items["Stone"] = (cargo.items["Stone"] or 0) + 1
@@ -37,85 +37,95 @@ local function collect_item(item, collector)
     else
         print("Picked up " .. tostring(itemComp.name))
     end
-    
+
     -- Mark item as collected; actual physics cleanup happens in update
     if item.item then
         item.item.collected = true
     end
 end
 
-function ItemPickupSystem:collision(entityA, entityB, contact)
+-- Collision callback removed as items are now kinematic without fixtures
 
-
-    local item, collector
-    
-    if entityA.item and entityB.wallet then
-        item = entityA
-        collector = entityB
-    elseif entityB.item and entityA.wallet then
-        item = entityB
-        collector = entityA
-    end
-    
-    if item and collector then
-        collect_item(item, collector)
-    end
-end
 
 function ItemPickupSystem:update(dt)
     local world = self:getWorld()
-    if not world or not world.physics_world then return end
+    if not world then return end
 
-    -- 1. Clean up any items that were marked as collected during collision
+    -- 1. Clean up any items that were marked as collected
     for _, entity in ipairs(self.pool) do
         if entity.item and entity.item.collected then
             EntityUtils.cleanup_physics_entity(entity)
         end
     end
 
-    -- 2. Magnetic Pickup Logic
+    -- 2. Process Pickups and Magnets
+    -- We need to check distance between items and collectors (ships with cargo/wallet)
+
+    -- Get all collectors (entities with cargo or wallet)
+    -- This is a bit expensive if there are many, but usually there's just the player
+    local collectors = {}
     for _, entity in ipairs(world:getEntities()) do
-        if entity.magnet and entity.transform then
-            local mag = entity.magnet
-            local tx, ty = entity.transform.x, entity.transform.y
-            
-            -- Query physics world for items within radius
-            local function queryCallback(fixture)
-                local e = fixture:getUserData()
-                if e and e.item and e.physics and e.physics.body then
-                    local body = e.physics.body
-                    local ix, iy = body:getPosition()
-                    local dx = tx - ix
-                    local dy = ty - iy
-                    local dist2 = dx*dx + dy*dy
-                    
-                    -- Auto-pickup distance (e.g. 30 units)
-                    local pickup_dist_sq = 30 * 30
-                    
-                    if dist2 < pickup_dist_sq then
-                        -- Auto-collect if close enough
-                        collect_item(e, entity)
-                    elseif dist2 < (mag.radius * mag.radius) and dist2 > 1 then
-                        local dist = math.sqrt(dist2)
-                        
-                        -- Gentle magnetic pull
-                        -- Force decreases linearly with distance, but we scale it down overall
-                        local force = mag.force * (1 - dist/mag.radius)
-                        
-                        -- Apply force towards magnet
-                        local nx, ny = dx/dist, dy/dist
-                        body:applyForce(nx * force, ny * force)
+        if (entity.cargo or entity.wallet) and entity.transform then
+            table.insert(collectors, entity)
+        end
+    end
+
+    for _, itemEntity in ipairs(self.pool) do
+        if not itemEntity.item.collected and itemEntity.physics and itemEntity.physics.body then
+            local itemBody = itemEntity.physics.body
+            local ix, iy = itemBody:getPosition()
+
+            -- Check against all collectors
+            for _, collector in ipairs(collectors) do
+                local cx, cy = collector.transform.x, collector.transform.y
+                local dx = cx - ix
+                local dy = cy - iy
+                local dist2 = dx * dx + dy * dy
+
+                -- Pickup radius (e.g. 30 units)
+                local pickup_radius = 30
+                if dist2 < (pickup_radius * pickup_radius) then
+                    collect_item(itemEntity, collector)
+                else
+                    -- Magnet Logic
+                    if collector.magnet then
+                        local mag = collector.magnet
+                        local mag_radius_sq = mag.radius * mag.radius
+
+                        if dist2 < mag_radius_sq and dist2 > 1 then
+                            local dist = math.sqrt(dist2)
+
+                            -- Calculate attraction velocity
+                            -- For kinematic bodies, we set velocity directly
+                            -- We want them to fly towards the collector
+
+                            local speed = 200                      -- Base magnet pull speed
+                            local factor = 1 - (dist / mag.radius) -- Stronger when closer
+                            local pull_speed = speed * factor
+
+                            -- Normalize direction
+                            local nx, ny = dx / dist, dy / dist
+
+                            -- Get current velocity to blend or just override?
+                            -- Let's add to it to simulate acceleration, but we must manually damp it if we do that.
+                            -- Simpler for kinematic: just set velocity towards player.
+                            -- But we want to preserve some of its original motion maybe?
+                            -- Let's just lerp towards the target velocity
+
+                            local vx, vy = itemBody:getLinearVelocity()
+                            local target_vx = nx * pull_speed * 2 -- *2 to make it snappy
+                            local target_vy = ny * pull_speed * 2
+
+                            -- Lerp factor
+                            local t = 5 * dt
+                            itemBody:setLinearVelocity(
+                                vx + (target_vx - vx) * t,
+                                vy + (target_vy - vy) * t
+                            )
+                        end
                     end
                 end
-                return true
             end
-            
-            local x1 = tx - mag.radius
-            local y1 = ty - mag.radius
-            local x2 = tx + mag.radius
-            local y2 = ty + mag.radius
-            
-            world.physics_world:queryBoundingBox(x1, y1, x2, y2, queryCallback)
         end
     end
 end

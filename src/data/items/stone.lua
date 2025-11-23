@@ -11,9 +11,9 @@ return {
     -- Visual properties
     render = {
         type = "polygon",
-        size = 4,                     -- Much smaller than before (was 8)
-        color = { 0.6, 0.6, 0.65, 1 }, -- Slightly bluish grey
-        num_points = { 5, 7 },        -- Random between 5-7 points
+        size = 4,                       -- Much smaller than before (was 8)
+        color = { 0.6, 0.6, 0.65, 1 },  -- Slightly bluish grey
+        num_points = { 5, 7 },          -- Random between 5-7 points
         radius_variation = { 0.7, 1.3 } -- Random radius multiplier range
     },
 
@@ -22,7 +22,6 @@ return {
         mass = 0.5,
         linear_damping = 1.0,
         angular_damping = 1.0,
-        sensor = true, -- Items don't collide, just trigger pickup
         spawn_velocity = {
             speed_min = 10,
             speed_max = 30,

@@ -52,36 +52,104 @@ function RenderStrategies.asteroid(e)
 
     local key = tostring(e)
     local poly = nil
+    local mesh = nil
 
     if type(r) == "table" and r.vertices then
         poly = r.vertices
     else
-        poly = asteroidShapes[key]
-        if not poly then
-            poly = {}
-            local seed = hashString(key)
-            local rng = (love and love.math and love.math.newRandomGenerator) and
-                love.math.newRandomGenerator(seed) or nil
-            local function rnd()
-                if rng and rng.random then
-                    return rng:random()
-                else
-                    return math.random()
+        -- Check if we have a cached mesh
+        local meshKey = key .. "_mesh"
+        mesh = asteroidShapes[meshKey]
+
+        if not mesh then
+            -- Generate polygon if not cached
+            poly = asteroidShapes[key]
+            if not poly then
+                poly = {}
+                local seed = hashString(key)
+                local rng = (love and love.math and love.math.newRandomGenerator) and
+                    love.math.newRandomGenerator(seed) or nil
+                local function rnd()
+                    if rng and rng.random then
+                        return rng:random()
+                    else
+                        return math.random()
+                    end
+                end
+
+                local vertex_count = 8 + math.floor(rnd() * 5)
+                if vertex_count < 5 then vertex_count = 5 end
+
+                for i = 1, vertex_count do
+                    local angle = (i / vertex_count) * math.pi * 2 + (rnd() - 0.5) * 0.4
+                    local rr = radius * (0.7 + rnd() * 0.4)
+                    table.insert(poly, math.cos(angle) * rr)
+                    table.insert(poly, math.sin(angle) * rr)
+                end
+
+                asteroidShapes[key] = poly
+            end
+
+            -- Create mesh from polygon using triangulation
+            -- Calculate centroid for fan triangulation
+            local cx, cy = 0, 0
+            local vertCount = #poly / 2
+            for i = 1, vertCount do
+                cx = cx + poly[(i - 1) * 2 + 1]
+                cy = cy + poly[(i - 1) * 2 + 2]
+            end
+            cx = cx / vertCount
+            cy = cy / vertCount
+
+            -- Find bounding box for UV normalization
+            local minX, maxX = poly[1], poly[1]
+            local minY, maxY = poly[2], poly[2]
+            for i = 1, vertCount do
+                local x = poly[(i - 1) * 2 + 1]
+                local y = poly[(i - 1) * 2 + 2]
+                minX = math.min(minX, x)
+                maxX = math.max(maxX, x)
+                minY = math.min(minY, y)
+                maxY = math.max(maxY, y)
+            end
+            local width = maxX - minX
+            local height = maxY - minY
+            local scale = math.max(width, height)
+
+            -- Build vertex list for mesh (triangle fan from center)
+            local vertices = {}
+            for i = 1, vertCount do
+                local x = poly[(i - 1) * 2 + 1]
+                local y = poly[(i - 1) * 2 + 2]
+                local u = (x - minX) / scale
+                local v = (y - minY) / scale
+                table.insert(vertices, { x, y, u, v, 1, 1, 1, 1 })
+            end
+
+            -- Create mesh with triangle fan
+            local triangles = {}
+            for i = 1, vertCount do
+                local next = (i % vertCount) + 1
+                table.insert(triangles, {
+                    { cx, cy, 0.5, 0.5, 1, 1, 1, 1 },
+                    vertices[i],
+                    vertices[next]
+                })
+            end
+
+            -- Flatten triangles into single vertex list
+            local flatVertices = {}
+            for _, tri in ipairs(triangles) do
+                for _, v in ipairs(tri) do
+                    table.insert(flatVertices, v)
                 end
             end
 
-            local vertex_count = 8 + math.floor(rnd() * 5)
-            if vertex_count < 5 then vertex_count = 5 end
-
-            for i = 1, vertex_count do
-                local angle = (i / vertex_count) * math.pi * 2 + (rnd() - 0.5) * 0.4
-                local rr = radius * (0.7 + rnd() * 0.4)
-                table.insert(poly, math.cos(angle) * rr)
-                table.insert(poly, math.sin(angle) * rr)
-            end
-
-            asteroidShapes[key] = poly
+            mesh = love.graphics.newMesh(flatVertices, "triangles", "static")
+            asteroidShapes[meshKey] = mesh
         end
+
+        poly = asteroidShapes[key]
     end
 
     -- Load shader on first use
@@ -96,13 +164,24 @@ function RenderStrategies.asteroid(e)
     if asteroidShader then
         love.graphics.setShader(asteroidShader)
         -- Send unique seed for this asteroid to make texture stable
-        local seed = hashString(key) / 2147483647 -- Normalize to 0-1
+        local seedVal = hashString(key)
+
+        -- Store seed in render component for chunks to inherit
+        if type(r) == "table" and not r.seed then
+            r.seed = seedVal
+        end
+
+        local seed = seedVal / 2147483647 -- Normalize to 0-1
         asteroidShader:send("seed", seed)
     end
 
     -- Draw base asteroid shape with shader
     love.graphics.setColor(cr, cg, cb, ca)
-    love.graphics.polygon("fill", poly)
+    if mesh then
+        love.graphics.draw(mesh)
+    else
+        love.graphics.polygon("fill", poly)
+    end
 
     -- Reset shader
     if asteroidShader then
@@ -110,14 +189,16 @@ function RenderStrategies.asteroid(e)
     end
 
     -- Black outline for crisp definition (very thin outline)
-    local oldLineWidth = love.graphics.getLineWidth()
-    local oldLineStyle = love.graphics.getLineStyle()
-    love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(0.5)
-    love.graphics.setLineStyle("rough") -- Disable anti-aliasing for crisp lines
-    love.graphics.polygon("line", poly)
-    love.graphics.setLineWidth(oldLineWidth)
-    love.graphics.setLineStyle(oldLineStyle)
+    if poly then
+        local oldLineWidth = love.graphics.getLineWidth()
+        local oldLineStyle = love.graphics.getLineStyle()
+        love.graphics.setColor(0, 0, 0, 1)
+        love.graphics.setLineWidth(0.5)
+        love.graphics.setLineStyle("rough") -- Disable anti-aliasing for crisp lines
+        love.graphics.polygon("line", poly)
+        love.graphics.setLineWidth(oldLineWidth)
+        love.graphics.setLineStyle(oldLineStyle)
+    end
 
     love.graphics.setColor(cr, cg, cb, ca)
 end
@@ -132,36 +213,104 @@ function RenderStrategies.asteroid_chunk(e)
 
     local key = tostring(e)
     local poly = nil
+    local mesh = nil
 
     if type(r) == "table" and r.vertices then
         poly = r.vertices
     else
-        poly = asteroidShapes[key]
-        if not poly then
-            poly = {}
-            local seed = hashString(key)
-            local rng = (love and love.math and love.math.newRandomGenerator) and
-                love.math.newRandomGenerator(seed) or nil
-            local function rnd()
-                if rng and rng.random then
-                    return rng:random()
-                else
-                    return math.random()
+        -- Check if we have a cached mesh
+        local meshKey = key .. "_mesh"
+        mesh = asteroidShapes[meshKey]
+
+        if not mesh then
+            -- Generate polygon if not cached
+            poly = asteroidShapes[key]
+            if not poly then
+                poly = {}
+                local seed = hashString(key)
+                local rng = (love and love.math and love.math.newRandomGenerator) and
+                    love.math.newRandomGenerator(seed) or nil
+                local function rnd()
+                    if rng and rng.random then
+                        return rng:random()
+                    else
+                        return math.random()
+                    end
+                end
+
+                local vertex_count = 4 + math.floor(rnd() * 3)
+                if vertex_count < 4 then vertex_count = 4 end
+
+                for i = 1, vertex_count do
+                    local angle = (i / vertex_count) * math.pi * 2 + (rnd() - 0.5) * 0.6
+                    local rr = radius * (0.6 + rnd() * 0.5)
+                    table.insert(poly, math.cos(angle) * rr)
+                    table.insert(poly, math.sin(angle) * rr)
+                end
+
+                asteroidShapes[key] = poly
+            end
+
+            -- Create mesh from polygon using triangulation
+            -- Calculate centroid for fan triangulation
+            local cx, cy = 0, 0
+            local vertCount = #poly / 2
+            for i = 1, vertCount do
+                cx = cx + poly[(i - 1) * 2 + 1]
+                cy = cy + poly[(i - 1) * 2 + 2]
+            end
+            cx = cx / vertCount
+            cy = cy / vertCount
+
+            -- Find bounding box for UV normalization
+            local minX, maxX = poly[1], poly[1]
+            local minY, maxY = poly[2], poly[2]
+            for i = 1, vertCount do
+                local x = poly[(i - 1) * 2 + 1]
+                local y = poly[(i - 1) * 2 + 2]
+                minX = math.min(minX, x)
+                maxX = math.max(maxX, x)
+                minY = math.min(minY, y)
+                maxY = math.max(maxY, y)
+            end
+            local width = maxX - minX
+            local height = maxY - minY
+            local scale = math.max(width, height)
+
+            -- Build vertex list for mesh (triangle fan from center)
+            local vertices = {}
+            for i = 1, vertCount do
+                local x = poly[(i - 1) * 2 + 1]
+                local y = poly[(i - 1) * 2 + 2]
+                local u = (x - minX) / scale
+                local v = (y - minY) / scale
+                table.insert(vertices, { x, y, u, v, 1, 1, 1, 1 })
+            end
+
+            -- Create mesh with triangle fan
+            local triangles = {}
+            for i = 1, vertCount do
+                local next = (i % vertCount) + 1
+                table.insert(triangles, {
+                    { cx, cy, 0.5, 0.5, 1, 1, 1, 1 },
+                    vertices[i],
+                    vertices[next]
+                })
+            end
+
+            -- Flatten triangles into single vertex list
+            local flatVertices = {}
+            for _, tri in ipairs(triangles) do
+                for _, v in ipairs(tri) do
+                    table.insert(flatVertices, v)
                 end
             end
 
-            local vertex_count = 4 + math.floor(rnd() * 3)
-            if vertex_count < 4 then vertex_count = 4 end
-
-            for i = 1, vertex_count do
-                local angle = (i / vertex_count) * math.pi * 2 + (rnd() - 0.5) * 0.6
-                local rr = radius * (0.6 + rnd() * 0.5)
-                table.insert(poly, math.cos(angle) * rr)
-                table.insert(poly, math.sin(angle) * rr)
-            end
-
-            asteroidShapes[key] = poly
+            mesh = love.graphics.newMesh(flatVertices, "triangles", "static")
+            asteroidShapes[meshKey] = mesh
         end
+
+        poly = asteroidShapes[key]
     end
 
     -- Load shader on first use
@@ -176,13 +325,30 @@ function RenderStrategies.asteroid_chunk(e)
     if asteroidShader then
         love.graphics.setShader(asteroidShader)
         -- Send unique seed for this asteroid chunk to make texture stable
-        local seed = hashString(key) / 2147483647 -- Normalize to 0-1
+        -- Use inherited seed if available, otherwise generate one
+        local seed = 0
+        if type(r) == "table" and r.seed then
+            seed = r.seed
+        else
+            seed = hashString(key)
+        end
+
+        -- Normalize to 0-1 range for shader
+        -- If seed is already large (from hash), normalize it. If it's small (passed from parent), use as is?
+        -- Actually, the parent seed was likely generated via hashString too, so it's a large integer.
+        -- We should normalize it consistently.
+        seed = seed / 2147483647
+
         asteroidShader:send("seed", seed)
     end
 
     -- Draw chunk shape with shader
     love.graphics.setColor(cr, cg, cb, ca)
-    love.graphics.polygon("fill", poly)
+    if mesh then
+        love.graphics.draw(mesh)
+    else
+        love.graphics.polygon("fill", poly)
+    end
 
     -- Reset shader
     if asteroidShader then
@@ -190,14 +356,16 @@ function RenderStrategies.asteroid_chunk(e)
     end
 
     -- Black outline (very thin outline)
-    local oldLineWidth = love.graphics.getLineWidth()
-    local oldLineStyle = love.graphics.getLineStyle()
-    love.graphics.setColor(0, 0, 0, 1)
-    love.graphics.setLineWidth(0.5)
-    love.graphics.setLineStyle("rough") -- Disable anti-aliasing for crisp lines
-    love.graphics.polygon("line", poly)
-    love.graphics.setLineWidth(oldLineWidth)
-    love.graphics.setLineStyle(oldLineStyle)
+    if poly then
+        local oldLineWidth = love.graphics.getLineWidth()
+        local oldLineStyle = love.graphics.getLineStyle()
+        love.graphics.setColor(0, 0, 0, 1)
+        love.graphics.setLineWidth(0.5)
+        love.graphics.setLineStyle("rough") -- Disable anti-aliasing for crisp lines
+        love.graphics.polygon("line", poly)
+        love.graphics.setLineWidth(oldLineWidth)
+        love.graphics.setLineStyle(oldLineStyle)
+    end
 end
 
 function RenderStrategies.projectile_shard(e)

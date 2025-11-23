@@ -84,6 +84,12 @@ function Background.new(enableNebula)
     -- Parallax per-instance variance (still subtle)
     self.nebulaParams.parallax = 0.03 + math.random() * 0.05
 
+    -- New variety parameters
+    self.nebulaParams.distortion = Config.BACKGROUND.NEBULA.DISTORTION_BASE +
+    math.random() * Config.BACKGROUND.NEBULA.DISTORTION_RANGE
+    self.nebulaParams.densityScale = Config.BACKGROUND.NEBULA.DENSITY_BASE +
+    math.random() * Config.BACKGROUND.NEBULA.DENSITY_RANGE
+
     self:generateStars()
 
     return self
@@ -228,6 +234,8 @@ function Background:draw(cam_x, cam_y, cam_sector_x, cam_sector_y)
         self.nebulaShader:send("alphaScale", self.nebulaParams.alphaScale)
         self.nebulaShader:send("colorA", self.nebulaParams.colorA)
         self.nebulaShader:send("colorB", self.nebulaParams.colorB)
+        self.nebulaShader:send("distortion", self.nebulaParams.distortion or 0.2)
+        self.nebulaShader:send("densityScale", self.nebulaParams.densityScale or 1.0)
 
         love.graphics.rectangle("fill", 0, 0, sw, sh)
         love.graphics.setShader()

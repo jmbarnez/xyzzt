@@ -23,7 +23,7 @@ return {
         STAR_SIZE = 16,
         STAR_SPRITE_BATCH_SIZE = 500,
         STAR_COUNT = 250,
-        CLEAR_COLOR = { 0.03, 0.05, 0.16, 1 },
+        CLEAR_COLOR = { 0, 0, 0, 1 },
 
         STAR_COLORS = {
             { 0.6,  0.7,  1.0 },
@@ -85,7 +85,11 @@ return {
             ALPHA_SCALE_RANGE = 0.55,
             INTENSITY_BASE = 0.45,
             INTENSITY_RANGE = 0.80,
-            HUE_SHIFT_RANGE = 0.70
+            HUE_SHIFT_RANGE = 0.70,
+            DISTORTION_BASE = 0.2,
+            DISTORTION_RANGE = 0.6,
+            DENSITY_BASE = 0.8,
+            DENSITY_RANGE = 0.4
         }
     }
 }

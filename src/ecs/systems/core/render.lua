@@ -3,6 +3,7 @@ local Config = require "src.config"
 local RenderStrategies = require "src.ecs.systems.core.render_strategies"
 
 local nameFont
+local trailShader
 
 local RenderSystem = Concord.system({
     drawPool = { "transform", "render", "sector" },
@@ -77,6 +78,33 @@ function RenderSystem:draw()
 
             -- Optimization: Only draw entities in neighbor sectors
             if math.abs(diff_x) <= 1 and math.abs(diff_y) <= 1 then
+                -- Draw Trail (World Space)
+                if e.trail and e.trail.mesh then
+                    if not trailShader then
+                        local shader_path = "assets/shaders/engine_trail.glsl"
+                        if love.filesystem.getInfo(shader_path) then
+                            trailShader = love.graphics.newShader(shader_path)
+                        end
+                    end
+
+                    local sector_offset_x = diff_x * Config.SECTOR_SIZE
+                    local sector_offset_y = diff_y * Config.SECTOR_SIZE
+
+                    love.graphics.push()
+                    love.graphics.translate(sector_offset_x, sector_offset_y)
+
+                    if trailShader then
+                        love.graphics.setShader(trailShader)
+                        trailShader:send("time", love.timer.getTime())
+                    end
+
+                    love.graphics.setColor(1, 1, 1, 1)
+                    love.graphics.draw(e.trail.mesh)
+                    love.graphics.setShader()
+
+                    love.graphics.pop()
+                end
+
                 -- Calculate Relative Position to Camera's Sector
                 local relative_x = t.x + (diff_x * Config.SECTOR_SIZE)
                 local relative_y = t.y + (diff_y * Config.SECTOR_SIZE)

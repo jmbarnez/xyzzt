@@ -30,10 +30,15 @@ function AsteroidChunkSpawner.spawn(world, parent_entity, num_chunks)
     local base_chunk_radius = parent_radius / math.sqrt(num_chunks)
 
     -- Create seeded RNG for deterministic variation
-    local entity_key = tostring(parent_entity)
+    -- Inherit seed from parent if available to keep texture consistent
     local seed = 0
-    for i = 1, #entity_key do
-        seed = (seed * 31 + entity_key:byte(i)) % 2147483647
+    if render.seed then
+        seed = render.seed
+    else
+        local entity_key = tostring(parent_entity)
+        for i = 1, #entity_key do
+            seed = (seed * 31 + entity_key:byte(i)) % 2147483647
+        end
     end
     local rng = love.math.newRandomGenerator(seed)
 
@@ -76,7 +81,8 @@ function AsteroidChunkSpawner.spawn(world, parent_entity, num_chunks)
             render_type = "asteroid_chunk",
             color = parent_color,
             radius = chunk_radius,
-            vertices = vertices -- Store vertices for rendering
+            vertices = vertices, -- Store vertices for rendering
+            seed = seed          -- Pass parent seed for texture consistency
         })
         chunk:give("asteroid_chunk")
 

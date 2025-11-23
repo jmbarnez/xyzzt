@@ -30,6 +30,7 @@ local ProjectileSystem      = require "src.ecs.systems.gameplay.projectile"
 local AsteroidChunkSystem   = require "src.ecs.systems.gameplay.asteroid_chunk"
 local ProjectileShardSystem = require "src.ecs.systems.visual.projectile_shard"
 local ItemPickupSystem      = require "src.ecs.systems.gameplay.item_pickup"
+local TrailSystem           = require "src.ecs.systems.visual.trail"
 local DefaultSector         = require "src.data.default_sector"
 
 local PlayState             = {}
@@ -122,8 +123,9 @@ function PlayState:enter(prev, param)
         AsteroidChunkSystem,
         ProjectileShardSystem,
         ItemPickupSystem, -- 9. Magnet logic
-        RenderSystem,     -- 10. Draw everything
-        MinimapSystem     -- 11. UI Draw
+        TrailSystem,      -- 10. Update trails
+        RenderSystem,     -- 11. Draw everything
+        MinimapSystem     -- 12. UI Draw
     )
 
     -- Player meta-entity (local user, not the ship itself)

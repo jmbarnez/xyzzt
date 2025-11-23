@@ -38,19 +38,13 @@ function ItemSpawners.spawn_item(world, item_id, x, y, sector_x, sector_y)
 
     -- Physics
     local phys = item_def.physics
-    local body = love.physics.newBody(world.physics_world, x, y, "dynamic")
+    -- Changed to kinematic as requested
+    local body = love.physics.newBody(world.physics_world, x, y, "kinematic")
     body:setLinearDamping(phys.linear_damping)
     body:setAngularDamping(phys.angular_damping)
 
-    local shape = love.physics.newPolygonShape(vertices)
-    local fixture = love.physics.newFixture(body, shape, phys.mass)
-
-    if phys.sensor then
-        fixture:setSensor(true)
-    end
-
-    fixture:setUserData(item)
-    item:give("physics", body, shape, fixture)
+    -- No shape or fixture for items anymore
+    item:give("physics", body, nil, nil)
 
     -- Apply random velocity
     local vel = phys.spawn_velocity

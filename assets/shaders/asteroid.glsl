@@ -1,14 +1,14 @@
 // Asteroid surface shader with procedural noise-based texture
-// Uses object-space coordinates with seeding so texture is stable per asteroid
+// Uses UV texture coordinates for stable, painted-on appearance
 
 uniform float seed;
-varying vec2 objectPos;
+varying vec2 vTexCoord;
 
 #ifdef VERTEX
 vec4 position(mat4 transform_projection, vec4 vertex_position)
 {
-    // Use object-space position so texture is "painted on" the surface
-    objectPos = vertex_position.xy;
+    // Pass through texture coordinates from vertex attributes
+    vTexCoord = VertexTexCoord.xy;
     return transform_projection * vertex_position;
 }
 #endif
@@ -54,8 +54,9 @@ float fbm(vec2 p)
 
 vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords)
 {
-    // Use object-space position with seed offset to make texture unique per asteroid
-    vec2 pos = (objectPos + seed * 100.0) * 0.06;
+    // Use UV coordinates with seed offset to make texture unique per asteroid
+    // Scale UV to create appropriate noise frequency
+    vec2 pos = (vTexCoord * 100.0 + seed * 100.0) * 0.06;
     
     // Generate multiple noise layers at different scales
     float n1 = fbm(pos);
