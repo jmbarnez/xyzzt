@@ -7,7 +7,6 @@ local Config    = require "src.config"
 local Background = require "src.rendering.background"
 local NewGameState = require "src.states.newgame"
 local SaveManager = require "src.managers.save_manager"
-local Screen = require "src.screen"
 
 -- Simplified Shader just for the Title Text (Aurora Effect on Text)
 local TitleShaderSource = [[
@@ -108,13 +107,7 @@ function MenuState:update(dt)
 
     self:updateButtonLayout()
 
-    local mx, my = love.mouse.getPosition()
-    local mouseX, mouseY
-    if Screen and Screen.windowToVirtual then
-        mouseX, mouseY = Screen.windowToVirtual(mx, my)
-    else
-        mouseX, mouseY = mx, my
-    end
+    local mouseX, mouseY = love.mouse.getPosition()
 
     self.hoveredButton = nil
     for index, rect in ipairs(self.buttonRects) do
@@ -156,7 +149,7 @@ function MenuState:updateButtonLayout()
         self.buttonRects[index] = nil
     end
 
-    local sw, sh = Screen.getInternalDimensions()
+    local sw, sh = love.graphics.getDimensions()
 
     local spacing = Theme.spacing
     local totalHeight = #self.buttons * spacing.buttonHeight + (#self.buttons - 1) * spacing.buttonSpacing
@@ -176,7 +169,7 @@ function MenuState:updateButtonLayout()
 end
 
 function MenuState:draw()
-    local sw, sh = Screen.getInternalDimensions()
+    local sw, sh = love.graphics.getDimensions()
 
     -- 1. Clear to a simple background color (pitch black)
     love.graphics.clear(0, 0, 0, 1)

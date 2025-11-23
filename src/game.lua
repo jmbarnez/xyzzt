@@ -6,12 +6,9 @@ local Config        = require "src.config"
 local MenuState     = require "src.states.menu"
 local Lurker        = require "lurker"
 local WeaponRegistry = require "src.managers.weapon_registry"
-local Screen        = require "src.screen"
 
 function love.load()
-    -- Initialize virtual resolution (internal 1920x1080)
-    Screen.init(1920, 1080)
-
+    -- Initialize game and load plugins
     WeaponRegistry.load_plugins()
     
     -- Start game in Menu
@@ -24,11 +21,8 @@ function love.update(dt)
 end
 
 function love.draw()
-    -- Render all game content to the virtual-resolution canvas,
-    -- then scale/letterbox it into the actual window.
-    Screen.beginDraw()
+    -- Render all game content directly to the window.
     Gamestate.draw()
-    Screen.endDraw()
 end
 
 function love.keypressed(key, scancode, isrepeat)
@@ -57,8 +51,7 @@ function love.wheelmoved(x, y)
 end
 
 function love.resize(w, h)
-    -- Update virtual resolution scaling when the window size changes
-    Screen.resize(w, h)
+    -- Forward resize events to the current Gamestate
     Gamestate.resize(w, h)
 end
 

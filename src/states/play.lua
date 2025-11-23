@@ -6,6 +6,8 @@ local Config      = require "src.config"
 local Background  = require "src.rendering.background"
 local HUD         = require "src.ui.hud.hud"
 local SaveManager = require "src.managers.save_manager"
+local Window      = require "src.ui.hud.window"
+local CargoPanel  = require "src.ui.hud.cargo_panel"
 
 require "src.ecs.components"
 
@@ -73,6 +75,17 @@ function PlayState:enter(prev, param)
 
     -- Physics (always present; role decides authority)
     self.world.physics_world = love.physics.newWorld(0, 0, true)
+
+    -- UI state for in-flight HUD
+    self.world.ui = {
+        cargo_open = false,
+        cargo_window = nil,
+        cargo_drag = {
+            active = false,
+            offset_x = 0,
+            offset_y = 0,
+        },
+    }
 
     -- Local controls
     self.world.controls = baton.new({
@@ -172,6 +185,28 @@ function PlayState:update(dt)
     end
 
     self.world:emit("update", dt)
+
+    -- Update cargo window drag (if any)
+    local ui = self.world and self.world.ui
+    if ui and ui.cargo_drag and ui.cargo_drag.active and ui.cargo_open then
+        local mx, my = love.mouse.getPosition()
+
+        local wx, wy, ww, wh = CargoPanel.getWindowRect(self.world)
+
+        local drag = ui.cargo_drag
+        local new_x = mx - drag.offset_x
+        local new_y = my - drag.offset_y
+
+        local sw, sh = love.graphics.getDimensions()
+        new_x = math.max(0, math.min(new_x, sw - ww))
+        new_y = math.max(0, math.min(new_y, sh - wh))
+
+        ui.cargo_window = ui.cargo_window or {}
+        ui.cargo_window.x = new_x
+        ui.cargo_window.y = new_y
+        ui.cargo_window.width = ww
+        ui.cargo_window.height = wh
+    end
 end
 
 function PlayState:draw()
@@ -183,7 +218,14 @@ function PlayState:draw()
 end
 
 function PlayState:keypressed(key)
-    if key == "f5" then
+    if key == "tab" then
+        if self.world and self.world.ui then
+            self.world.ui.cargo_open = not self.world.ui.cargo_open
+            if not self.world.ui.cargo_open and self.world.ui.cargo_drag then
+                self.world.ui.cargo_drag.active = false
+            end
+        end
+    elseif key == "f5" then
         SaveManager.save(1, self.world, self.player)
     elseif key == "f9" then
         if SaveManager.has_save(1) then
@@ -192,6 +234,55 @@ function PlayState:keypressed(key)
             -- No save file
         end
     end
+end
+
+function PlayState:mousepressed(x, y, button)
+    if button ~= 1 then
+        return
+    end
+
+    if not (self.world and self.world.ui and self.world.ui.cargo_open) then
+        return
+    end
+
+    local wx, wy, ww, wh = CargoPanel.getWindowRect(self.world)
+    local layout = Window.getLayout({ x = wx, y = wy, width = ww, height = wh })
+    local r = layout.close
+
+    -- Close button
+    if x >= r.x and x <= r.x + r.w and y >= r.y and y <= r.y + r.h then
+        self.world.ui.cargo_open = false
+        if self.world.ui.cargo_drag then
+            self.world.ui.cargo_drag.active = false
+        end
+        return
+    end
+
+    -- Begin dragging when clicking the title bar (excluding close button)
+    local tb = layout.titleBar
+    if x >= tb.x and x <= tb.x + tb.w and y >= tb.y and y <= tb.y + tb.h then
+        local ui = self.world.ui
+        ui.cargo_drag = ui.cargo_drag or {}
+        ui.cargo_drag.active = true
+        ui.cargo_drag.offset_x = x - wx
+        ui.cargo_drag.offset_y = y - wy
+
+        ui.cargo_window = ui.cargo_window or {}
+        ui.cargo_window.width = ww
+        ui.cargo_window.height = wh
+    end
+end
+
+function PlayState:mousereleased(x, y, button)
+    if button ~= 1 then
+        return
+    end
+
+    if not (self.world and self.world.ui and self.world.ui.cargo_drag) then
+        return
+    end
+
+    self.world.ui.cargo_drag.active = false
 end
 
 return PlayState

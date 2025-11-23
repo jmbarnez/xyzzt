@@ -51,7 +51,7 @@ function ShipManager.spawn(world, ship_def, x, y, is_host_player)
 
     -- Input component
     ship:give("input")
-    ship:give("weapon", "pulse_laser")
+    ship:give("weapon", "pulse_laser", data.weapon_mounts or { { x = data.radius, y = 0 } })
     ship:give("level")
     ship:give("cargo", 50)       -- Default capacity 50 (volume)
     ship:give("magnet", 100, 20) -- Radius 100, Force 20 (weaker magnet)

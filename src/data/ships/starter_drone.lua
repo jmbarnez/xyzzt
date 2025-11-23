@@ -8,6 +8,10 @@ return {
     restitution = 0.2,
     radius = 10,
 
+    weapon_mounts = {
+        { x = 12, y = 0 },
+    },
+
     -- Vehicle
     thrust = Config.THRUST,
     rotation_speed = Config.ROTATION_SPEED,

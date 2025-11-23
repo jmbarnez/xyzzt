@@ -1,6 +1,5 @@
 local Concord = require "concord"
 local MathUtils = require "src.utils.math_utils"
-local Screen = require "src.screen"
 
 -- This system now has two distinct responsibilities:
 -- 1. CLIENT/LOCAL: Read hardware inputs (Baton) and store them in the Input Component.
@@ -46,14 +45,11 @@ function InputSystem:update(dt)
                     local sx, sy = ship.transform.x, ship.transform.y
 
                     local mx, my = love.mouse.getPosition()
-                    if Screen and Screen.windowToVirtual then
-                        mx, my = Screen.windowToVirtual(mx, my)
-                    end
 
                     local wx, wy = mx, my
                     if world.camera and world.camera.worldCoords then
-                        local iw, ih = Screen.getInternalDimensions()
-                        wx, wy = world.camera:worldCoords(mx, my, 0, 0, iw, ih)
+                        local screen_w, screen_h = love.graphics.getDimensions()
+                        wx, wy = world.camera:worldCoords(mx, my, 0, 0, screen_w, screen_h)
                     end
 
                     local dx = wx - sx

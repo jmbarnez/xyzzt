@@ -3,7 +3,6 @@ local Gamestate = require "hump.gamestate"
 local Theme = require "src.ui.theme"
 local Config = require "src.config"
 local PlayState = require "src.states.play"
-local Screen = require "src.screen"
 
 local function pointInRect(x, y, rect)
     return x >= rect.x and x <= rect.x + rect.w and y >= rect.y and y <= rect.y + rect.h
@@ -94,7 +93,7 @@ function NewGameState:updateButtonLayout()
         self.buttonRects[index] = nil
     end
 
-    local sw, sh = Screen.getInternalDimensions()
+    local sw, sh = love.graphics.getDimensions()
     local spacing = Theme.spacing
     local totalHeight = #self.buttons * spacing.buttonHeight + (#self.buttons - 1) * spacing.buttonSpacing
     local startX = (sw - spacing.buttonWidth) * 0.5
@@ -115,13 +114,7 @@ end
 function NewGameState:update(dt)
     self:updateButtonLayout()
 
-    local mx, my = love.mouse.getPosition()
-    local mouseX, mouseY
-    if Screen and Screen.windowToVirtual then
-        mouseX, mouseY = Screen.windowToVirtual(mx, my)
-    else
-        mouseX, mouseY = mx, my
-    end
+    local mouseX, mouseY = love.mouse.getPosition()
     local isDown = love.mouse.isDown(1)
 
     if isDown and not self.mouseWasDown then
@@ -160,7 +153,7 @@ function NewGameState:update(dt)
 end
 
 function NewGameState:draw()
-    local sw, sh = Screen.getInternalDimensions()
+    local sw, sh = love.graphics.getDimensions()
     love.graphics.clear(0, 0, 0, 1)
 
     love.graphics.setColor(1, 1, 1, 1)

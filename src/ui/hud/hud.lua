@@ -1,15 +1,20 @@
 local Theme = require "src.ui.theme"
 local Config = require "src.config"
 local StatusPanel = require "src.ui.hud.status_panel"
-local Screen = require "src.screen"
+local CargoPanel = require "src.ui.hud.cargo_panel"
 
 local HUD = {}
 
 function HUD.draw(world, player)
-    local sw, sh = Screen.getInternalDimensions()
+    local sw, sh = love.graphics.getDimensions()
     
     -- Draw status panel (top-left)
     StatusPanel.draw(player)
+
+    -- Draw cargo panel (bottom-right) when opened
+    if world and world.ui and world.ui.cargo_open then
+        CargoPanel.draw(world, player)
+    end
 
     -- FPS Counter (Top Right)
     love.graphics.setColor(0.2, 1.0, 0.2, 1.0)
