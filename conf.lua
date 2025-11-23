@@ -1,0 +1,10 @@
+function love.conf(t)
+    t.window.title = "Novus"
+    t.window.width = 1600
+    t.window.height = 900
+    t.window.fullscreen = false
+    t.window.resizable = true
+    t.window.vsync = false
+    t.window.msaa = 2
+    t.console = true
+end
