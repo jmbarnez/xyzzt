@@ -3,55 +3,54 @@ local ProjectileShatter = require "src.effects.projectile_shatter"
 
 local CollisionHandlers = {}
 
---- Handle collision between projectile and asteroid/asteroid_chunk
---- Applies damage to the target and destroys the projectile with shatter effect
---- @param projectile Entity The projectile entity
---- @param target Entity The asteroid or asteroid_chunk entity
---- @param world World The Concord world
-function CollisionHandlers.handle_projectile_asteroid(projectile, target, world)
-    if not projectile or not target or not world then
-        return
-    end
+-- Projectile vs Asteroid/Chunk/Enemy
+function CollisionHandlers.handle_projectile_hit(projectile, target, world)
+    if not (projectile and target and world) then return end
 
-    -- Get damage from projectile
+    -- Get damage
     local damage = 0
     if projectile.projectile and projectile.projectile.damage then
         damage = projectile.projectile.damage
     end
 
-    -- Apply damage to target if it has HP
-    -- The physics system will handle destruction when HP <= 0
-    if target.hp and damage > 0 then
-        target.hp.current = target.hp.current - damage
-        target.hp.last_hit_time = love.timer.getTime()
+    -- Apply damage
+    if target.hp then
+        EntityUtils.apply_damage(target, damage)
     end
 
-    -- Destroy the projectile and spawn shatter effect
-    if projectile and projectile:getWorld() then
-        -- Spawn shards at projectile location before destroying
-        if projectile.transform and projectile.render and projectile.sector then
-            local color = projectile.render.color or { 1, 1, 1, 1 }
+    -- Mark projectile as hit; ProjectileSystem will handle shatter + cleanup
+    if projectile.projectile then
+        projectile.projectile.hit_something = true
+    end
+end
 
-            -- Get projectile velocity for directional shatter
-            local vx, vy = 0, 0
-            if projectile.physics and projectile.physics.body then
-                vx, vy = projectile.physics.body:getLinearVelocity()
+-- Item vs Collector
+function CollisionHandlers.handle_item_pickup(item, collector)
+    if not (item and collector) then return end
+    
+    local itemComp = item.item
+
+    if not itemComp then return end
+    
+    -- Logic for specific items
+    if itemComp.name == "Stone" then
+        if collector.cargo then
+            local cargo = collector.cargo
+            local item_vol = itemComp.volume or 1.0
+            
+            if (cargo.current + item_vol) <= cargo.capacity then
+                cargo.current = cargo.current + item_vol
+                cargo.items["Stone"] = (cargo.items["Stone"] or 0) + 1
+            else
+                -- Cargo full
+                return 
             end
-
-            ProjectileShatter.spawn(
-                world,
-                projectile.transform.x,
-                projectile.transform.y,
-                projectile.sector.x,
-                projectile.sector.y,
-                color,
-                projectile.projectile.radius or 2,
-                vx, vy
-            )
         end
-
-        -- Clean up the projectile entity
-        EntityUtils.cleanup_physics_entity(projectile)
+    end
+    
+    -- Mark item as collected; ItemSystem will handle cleanup
+    if item.item then
+        item.item.collected = true
     end
 end
 

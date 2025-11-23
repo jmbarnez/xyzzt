@@ -84,8 +84,45 @@ function WeaponSystem:update(dt)
                 local body = love.physics.newBody(world.physics_world, px, py, "dynamic")
                 body:setBullet(true)
                 body:setAngle(angle)
-                local radius = proj_cfg.radius or weapon_def.radius or 3
-                local shape = love.physics.newCircleShape(radius)
+
+                -- Create polygon collision shape based on projectile visual type
+                local shape
+                if proj_shape == "beam" or not proj_shape then
+                    -- Beam projectile: use rectangular polygon
+                    local radius = proj_cfg.radius or weapon_def.radius or 3
+                    local length = proj_length or (radius * 4)
+                    local thickness = proj_thickness or (radius * 0.7)
+
+                    -- Create rectangle vertices (centered at origin)
+                    local half_length = length * 0.5
+                    local half_thickness = thickness * 0.5
+                    shape = love.physics.newPolygonShape(
+                        -half_length, -half_thickness, -- bottom-left
+                        half_length, -half_thickness,  -- bottom-right
+                        half_length, half_thickness,   -- top-right
+                        -half_length, half_thickness   -- top-left
+                    )
+                elseif proj_shape == "circle" then
+                    -- Circle projectile: use octagon for better precision
+                    local radius = proj_cfg.radius or weapon_def.radius or 3
+                    local vertices = {}
+                    for i = 0, 7 do
+                        local angle_offset = (i / 8) * math.pi * 2
+                        table.insert(vertices, math.cos(angle_offset) * radius)
+                        table.insert(vertices, math.sin(angle_offset) * radius)
+                    end
+                    shape = love.physics.newPolygonShape(unpack(vertices))
+                else
+                    -- Fallback: small rectangle for unknown shapes
+                    local radius = proj_cfg.radius or weapon_def.radius or 3
+                    local half = radius * 0.7
+                    shape = love.physics.newPolygonShape(
+                        -half, -half,
+                        half, -half,
+                        half, half,
+                        -half, half
+                    )
+                end
 
                 -- Get mass from projectile config or weapon config, default to 0.1
                 local mass = proj_cfg.mass or weapon_def.mass or 0.1

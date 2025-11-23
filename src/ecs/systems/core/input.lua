@@ -7,40 +7,39 @@ local MathUtils = require "src.utils.math_utils"
 
 local InputSystem = Concord.system({
     -- Entities that have input and are controlling a vehicle
-    controllers = {"input", "controlling"}
+    controllers = { "input", "controlling" }
 })
 
 
 
 function InputSystem:update(dt)
     local world = self:getWorld()
-    
+
     -- 1. GATHER INPUT (Local Player Only)
     -- If we have a controls object (baton), we update the components of our local player
     if world.controls then
         world.controls:update(dt)
-        
+
         -- Find the entity that represents the local player
         for _, e in ipairs(self.controllers) do
             if e:has("pilot") then -- Assuming 'pilot' tag marks the local user's avatar
-                local input = e.input
+                local input      = e.input
 
                 local move_left  = world.controls:down("move_left") and 1 or 0
                 local move_right = world.controls:down("move_right") and 1 or 0
                 local move_up    = world.controls:down("move_up") and 1 or 0
                 local move_down  = world.controls:down("move_down") and 1 or 0
 
-                local move_x = move_right - move_left
-                local move_y = move_down - move_up
+                local move_x     = move_right - move_left
+                local move_y     = move_down - move_up
 
-                input.move_x = move_x
-                input.move_y = move_y
+                input.move_x     = move_x
+                input.move_y     = move_y
 
-                input.thrust = move_up == 1
-                input.turn = 0
-                input.fire = world.controls:down("fire")
+                input.turn       = 0
+                input.fire       = world.controls:down("fire")
 
-                local ship = e.controlling and e.controlling.entity or nil
+                local ship       = e.controlling and e.controlling.entity or nil
                 if ship and ship.transform and ship.physics and ship.physics.body then
                     local sx, sy = ship.transform.x, ship.transform.y
 
@@ -95,7 +94,7 @@ function InputSystem:update(dt)
                 body:setAngle(current_angle)
             end
 
-            -- B. Handle Thrust / Movement
+            -- B. Handle Movement (always in absolute screen directions)
             local fx, fy = 0, 0
             if input.move_x and input.move_y and (input.move_x ~= 0 or input.move_y ~= 0) then
                 local len = math.sqrt(input.move_x * input.move_x + input.move_y * input.move_y)
@@ -105,10 +104,6 @@ function InputSystem:update(dt)
                     fx = nx * stats.thrust
                     fy = ny * stats.thrust
                 end
-            elseif input.thrust then
-                local angle = body:getAngle()
-                fx = math.cos(angle) * stats.thrust
-                fy = math.sin(angle) * stats.thrust
             end
 
             if fx ~= 0 or fy ~= 0 then

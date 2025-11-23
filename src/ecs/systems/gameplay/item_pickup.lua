@@ -38,8 +38,10 @@ local function collect_item(item, collector)
         print("Picked up " .. tostring(itemComp.name))
     end
     
-    -- Destroy item
-    EntityUtils.cleanup_physics_entity(item)
+    -- Mark item as collected; actual physics cleanup happens in update
+    if item.item then
+        item.item.collected = true
+    end
 end
 
 function ItemPickupSystem:collision(entityA, entityB, contact)
@@ -61,10 +63,17 @@ function ItemPickupSystem:collision(entityA, entityB, contact)
 end
 
 function ItemPickupSystem:update(dt)
-    -- Magnetic Pickup Logic
     local world = self:getWorld()
     if not world or not world.physics_world then return end
-    
+
+    -- 1. Clean up any items that were marked as collected during collision
+    for _, entity in ipairs(self.pool) do
+        if entity.item and entity.item.collected then
+            EntityUtils.cleanup_physics_entity(entity)
+        end
+    end
+
+    -- 2. Magnetic Pickup Logic
     for _, entity in ipairs(world:getEntities()) do
         if entity.magnet and entity.transform then
             local mag = entity.magnet

@@ -3,6 +3,9 @@ local Window = require "src.ui.hud.window"
 
 local CargoPanel = {}
 
+-- Cache for item icon shapes to prevent regeneration each frame
+local icon_shape_cache = {}
+
 -- Helper to draw a simple horizontal capacity bar
 local function drawBar(x, y, width, height, current, max, colorFill, colorBg)
     local pct = 0
@@ -92,12 +95,16 @@ function CargoPanel.draw(world, player)
         return
     end
 
-    local slotSize = 32
-    local slotGap = 4
+    local slotSize = 64 -- Increased from 32 to fit icon + text
+    local slotGap = 8
     local cols = math.max(1, math.floor((cw + slotGap) / (slotSize + slotGap)))
 
     local textColor = { 0.9, 0.95, 1.0, 1.0 }
-    local countColor = { 0.9, 0.9, 0.9, 1.0 }
+    local countColor = { 1.0, 1.0, 0.8, 1.0 } -- Slightly yellow for visibility
+    local nameColor = { 0.85, 0.85, 0.85, 1.0 }
+
+    -- Load item definitions for rendering icons
+    local ItemDefinitions = require "src.data.items"
 
     for index, it in ipairs(items) do
         local idx = index - 1
@@ -112,16 +119,68 @@ function CargoPanel.draw(world, player)
             break
         end
 
-        -- Invisible slot: only draw item representation in a notional cell
-        love.graphics.setColor(textColor)
-        love.graphics.print(it.name, sx, sy)
+        -- Draw slot background (subtle)
+        love.graphics.setColor(0.15, 0.15, 0.2, 0.5)
+        love.graphics.rectangle("fill", sx, sy, slotSize, slotSize, 2, 2)
+        love.graphics.setColor(0.3, 0.3, 0.35, 0.8)
+        love.graphics.setLineWidth(1)
+        love.graphics.rectangle("line", sx, sy, slotSize, slotSize, 2, 2)
 
-        -- Stack count in the bottom-right of the cell
+        -- Draw item icon (rendered shape) in center of slot
+        local item_def = ItemDefinitions[it.name:lower()]
+        if item_def and item_def.render then
+            love.graphics.push()
+            love.graphics.translate(sx + slotSize * 0.5, sy + slotSize * 0.4) -- Center upper portion
+
+            -- Get or generate the item shape (cached to prevent spinning)
+            local cache_key = it.name:lower()
+            local vertices = icon_shape_cache[cache_key]
+            if not vertices then
+                -- Generate once and cache it
+                vertices = item_def:generate_shape()
+                icon_shape_cache[cache_key] = vertices
+            end
+
+            local color = item_def.render.color or { 0.6, 0.6, 0.65, 1 }
+
+            -- Scale up the icon for visibility
+            local scale = 3.0
+            love.graphics.push()
+            love.graphics.scale(scale, scale)
+
+            love.graphics.setColor(color[1], color[2], color[3], color[4] or 1)
+            if vertices and #vertices >= 6 then
+                love.graphics.polygon("fill", vertices)
+                -- Draw outline
+                love.graphics.setColor(color[1] * 0.5, color[2] * 0.5, color[3] * 0.5, (color[4] or 1))
+                love.graphics.setLineWidth(0.5)
+                love.graphics.polygon("line", vertices)
+            end
+
+            love.graphics.pop()
+            love.graphics.pop()
+        end
+
+        -- Draw amount in top-right corner
         local countText = tostring(it.count or 0)
         local countW = fontText:getWidth(countText)
         local countH = fontText:getHeight()
+
+        -- Background for count to improve readability
+        love.graphics.setColor(0, 0, 0, 0.7)
+        love.graphics.rectangle("fill", sx + slotSize - countW - 4, sy + 2, countW + 4, countH + 2, 1, 1)
+
         love.graphics.setColor(countColor)
-        love.graphics.print(countText, sx + slotSize - countW - 1, sy + slotSize - countH)
+        love.graphics.print(countText, sx + slotSize - countW - 2, sy + 2)
+
+        -- Draw name at bottom-center of slot
+        local nameText = it.name
+        local nameW = fontText:getWidth(nameText)
+        local nameX = sx + (slotSize - nameW) * 0.5
+        local nameY = sy + slotSize - countH - 2
+
+        love.graphics.setColor(nameColor)
+        love.graphics.print(nameText, nameX, nameY)
     end
 end
 

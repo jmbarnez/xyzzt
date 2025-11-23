@@ -3,6 +3,7 @@ local Ships = require "src.data.ships"
 local RenderStrategies = {}
 
 local asteroidShapes = {}
+local asteroidShader = nil
 
 local function hashString(s)
     local h = 0
@@ -83,30 +84,40 @@ function RenderStrategies.asteroid(e)
         end
     end
 
-    love.graphics.polygon("fill", poly)
-
-    local inner = {}
-    for i = 1, #poly, 2 do
-        table.insert(inner, poly[i] * 0.7)
-        table.insert(inner, poly[i + 1] * 0.7)
+    -- Load shader on first use
+    if not asteroidShader then
+        local shader_path = "assets/shaders/asteroid.glsl"
+        if love.filesystem.getInfo(shader_path) then
+            asteroidShader = love.graphics.newShader(shader_path)
+        end
     end
 
-    local hr = math.min((cr or 1) * 1.1, 1)
-    local hg = math.min((cg or 1) * 1.1, 1)
-    local hb = math.min((cb or 1) * 1.1, 1)
-    local ha = (ca or 1) * 0.9
-    love.graphics.setColor(hr, hg, hb, ha)
-    love.graphics.polygon("fill", inner)
+    -- Apply shader if available
+    if asteroidShader then
+        love.graphics.setShader(asteroidShader)
+        -- Send unique seed for this asteroid to make texture stable
+        local seed = hashString(key) / 2147483647 -- Normalize to 0-1
+        asteroidShader:send("seed", seed)
+    end
 
-    local orr = (cr or 1) * 0.5
-    local org = (cg or 1) * 0.5
-    local orb = (cb or 1) * 0.5
-    local ora = ca or 1
+    -- Draw base asteroid shape with shader
+    love.graphics.setColor(cr, cg, cb, ca)
+    love.graphics.polygon("fill", poly)
+
+    -- Reset shader
+    if asteroidShader then
+        love.graphics.setShader()
+    end
+
+    -- Black outline for crisp definition (very thin outline)
     local oldLineWidth = love.graphics.getLineWidth()
-    love.graphics.setColor(orr, org, orb, ora)
-    love.graphics.setLineWidth(2)
+    local oldLineStyle = love.graphics.getLineStyle()
+    love.graphics.setColor(0, 0, 0, 1)
+    love.graphics.setLineWidth(0.5)
+    love.graphics.setLineStyle("rough") -- Disable anti-aliasing for crisp lines
     love.graphics.polygon("line", poly)
     love.graphics.setLineWidth(oldLineWidth)
+    love.graphics.setLineStyle(oldLineStyle)
 
     love.graphics.setColor(cr, cg, cb, ca)
 end
@@ -153,17 +164,40 @@ function RenderStrategies.asteroid_chunk(e)
         end
     end
 
+    -- Load shader on first use
+    if not asteroidShader then
+        local shader_path = "assets/shaders/asteroid.glsl"
+        if love.filesystem.getInfo(shader_path) then
+            asteroidShader = love.graphics.newShader(shader_path)
+        end
+    end
+
+    -- Apply shader if available
+    if asteroidShader then
+        love.graphics.setShader(asteroidShader)
+        -- Send unique seed for this asteroid chunk to make texture stable
+        local seed = hashString(key) / 2147483647 -- Normalize to 0-1
+        asteroidShader:send("seed", seed)
+    end
+
+    -- Draw chunk shape with shader
+    love.graphics.setColor(cr, cg, cb, ca)
     love.graphics.polygon("fill", poly)
 
-    local orr = (cr or 1) * 0.5
-    local org = (cg or 1) * 0.5
-    local orb = (cb or 1) * 0.5
-    local ora = ca or 1
+    -- Reset shader
+    if asteroidShader then
+        love.graphics.setShader()
+    end
+
+    -- Black outline (very thin outline)
     local oldLineWidth = love.graphics.getLineWidth()
-    love.graphics.setColor(orr, org, orb, ora)
-    love.graphics.setLineWidth(1.5)
+    local oldLineStyle = love.graphics.getLineStyle()
+    love.graphics.setColor(0, 0, 0, 1)
+    love.graphics.setLineWidth(0.5)
+    love.graphics.setLineStyle("rough") -- Disable anti-aliasing for crisp lines
     love.graphics.polygon("line", poly)
     love.graphics.setLineWidth(oldLineWidth)
+    love.graphics.setLineStyle(oldLineStyle)
 end
 
 function RenderStrategies.projectile_shard(e)
@@ -262,20 +296,49 @@ end
 
 function RenderStrategies.ship(e)
     local r = e.render
-    local shipData
+    if not r then return end
 
-    if type(r.type) == "table" then
-        shipData = r.type
-    else
-        shipData = Ships[r.type]
-    end
+    -- Color tint for player (green) or enemy (red)
+    local tint = r.color or { 1, 1, 1, 1 }
 
-    if shipData and shipData.draw then
-        shipData.draw(r.color)
+    if r.shapes then
+        -- Iterate through the data-driven shape list
+        for _, shape in ipairs(r.shapes) do
+            -- Blend shape color with tint by multiplication
+            local shapeColor = shape.color or { 1, 1, 1, 1 }
+            local blended = {
+                shapeColor[1] * tint[1],
+                shapeColor[2] * tint[2],
+                shapeColor[3] * tint[3],
+                (shapeColor[4] or 1) * (tint[4] or 1)
+            }
+            love.graphics.setColor(blended)
+
+            if shape.type == "polygon" and shape.points then
+                love.graphics.polygon("fill", shape.points)
+                if shape.outline then
+                    love.graphics.setColor(shape.outline)
+                    love.graphics.setLineWidth(1)
+                    love.graphics.polygon("line", shape.points)
+                end
+            elseif shape.type == "circle" then
+                local cx = shape.x or 0
+                local cy = shape.y or 0
+                local rad = shape.radius or 2
+                love.graphics.circle("fill", cx, cy, rad)
+                if shape.outline then
+                    love.graphics.setColor(shape.outline)
+                    love.graphics.circle("line", cx, cy, rad)
+                end
+            end
+        end
     else
-        local color = r.color or { 1, 1, 1 }
-        love.graphics.setColor(table.unpack(color))
+        -- Fallback for ships without shape data (e.g., placeholder or procedural)
+        love.graphics.setColor(tint)
         love.graphics.circle("fill", 0, 0, 10)
+        -- Nose indicator
+        love.graphics.setColor(0, 0, 0, 1)
+        love.graphics.line(0, 0, 10, 0)
     end
 end
 

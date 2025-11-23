@@ -5,13 +5,20 @@ local Concord     = require "concord"
 local Config      = require "src.config"
 local Background  = require "src.rendering.background"
 local HUD         = require "src.ui.hud.hud"
+local Chat        = require "src.ui.hud.chat"
 local SaveManager = require "src.managers.save_manager"
 local Window      = require "src.ui.hud.window"
 local CargoPanel  = require "src.ui.hud.cargo_panel"
 
 require "src.ecs.components"
 
-local InputSystem           = require "src.ecs.systems.core.input"
+-- System Imports
+local PlayerControlSystem   = require "src.ecs.systems.gameplay.player_control"
+local MovementSystem        = require "src.ecs.systems.core.movement"
+local DeathSystem           = require "src.ecs.systems.gameplay.death"
+local LootSystem            = require "src.ecs.systems.gameplay.loot"
+local CollisionSystem       = require "src.ecs.systems.core.collision"
+
 local MinimapSystem         = require "src.ecs.systems.visual.minimap"
 local PhysicsSystem         = require "src.ecs.systems.core.physics"
 local RenderSystem          = require "src.ecs.systems.core.render"
@@ -26,9 +33,6 @@ local ItemPickupSystem      = require "src.ecs.systems.gameplay.item_pickup"
 local DefaultSector         = require "src.data.default_sector"
 
 local PlayState             = {}
-
-
-
 
 local function createLocalPlayer(world)
     local player = Concord.entity(world)
@@ -68,7 +72,6 @@ function PlayState:enter(prev, param)
     self.world = Concord.world()
     self.world.background = Background.new()
 
-
     -- Camera
     self.world.camera = Camera.new()
     self.world.camera:zoomTo(Config.CAMERA_DEFAULT_ZOOM)
@@ -87,6 +90,10 @@ function PlayState:enter(prev, param)
         },
     }
 
+    -- Init Chat
+    Chat.init()
+    Chat.enable()
+
     -- Local controls
     self.world.controls = baton.new({
         controls = {
@@ -98,20 +105,26 @@ function PlayState:enter(prev, param)
         }
     })
 
-    -- Systems
+    -- Controls are enabled by default
+    self.world.controlsEnabled = true
+
+    -- Add Systems
+    -- Order matters: Input -> Logic -> Physics -> Collision -> Gameplay -> Render
     self.world:addSystems(
-        InputSystem,
-        PhysicsSystem, -- Physical collisions (ships, asteroids)
-        WeaponSystem,
-        ProjectileSystem,
+        PlayerControlSystem, -- 1. Map Hardware to Input Component
+        MovementSystem,      -- 2. Apply Physics based on Input
+        PhysicsSystem,       -- 3. Step Box2D & Handle Sector Wrapping
+        CollisionSystem,     -- 4. Resolve Collisions (Damage, etc)
+        WeaponSystem,        -- 5. Fire weapons
+        ProjectileSystem,    -- 6. Update projectiles
+        DeathSystem,         -- 7. Handle HP <= 0
+        LootSystem,          -- 8. Spawn loot from dead entities
         AsteroidChunkSystem,
         ProjectileShardSystem,
-        RenderSystem,
-        MinimapSystem,
-        ItemPickupSystem
+        ItemPickupSystem, -- 9. Magnet logic
+        RenderSystem,     -- 10. Draw everything
+        MinimapSystem     -- 11. UI Draw
     )
-
-
 
     -- Player meta-entity (local user, not the ship itself)
     self.player = createLocalPlayer(self.world)
@@ -180,6 +193,16 @@ function PlayState:enter(prev, param)
 end
 
 function PlayState:update(dt)
+    -- 1. Update Chat
+    Chat.update(dt)
+
+    -- 2. Toggle Controls based on Chat state
+    if Chat.isActive() then
+        self.world.controlsEnabled = false
+    else
+        self.world.controlsEnabled = true
+    end
+
     if self.world.background then
         self.world.background:update(dt)
     end
@@ -190,7 +213,6 @@ function PlayState:update(dt)
     local ui = self.world and self.world.ui
     if ui and ui.cargo_drag and ui.cargo_drag.active and ui.cargo_open then
         local mx, my = love.mouse.getPosition()
-
         local wx, wy, ww, wh = CargoPanel.getWindowRect(self.world)
 
         local drag = ui.cargo_drag
@@ -215,9 +237,18 @@ function PlayState:draw()
 
     love.graphics.origin()
     HUD.draw(self.world, self.player)
+
+    -- Draw Chat Overlay
+    Chat.draw()
 end
 
 function PlayState:keypressed(key)
+    -- 1. Check Chat First
+    if Chat.keypressed(key) then
+        return -- Chat consumed the input
+    end
+
+    -- 2. Standard Game Keys
     if key == "tab" then
         if self.world and self.world.ui then
             self.world.ui.cargo_open = not self.world.ui.cargo_open
@@ -230,9 +261,14 @@ function PlayState:keypressed(key)
     elseif key == "f9" then
         if SaveManager.has_save(1) then
             Gamestate.switch(PlayState, { mode = "load", slot = 1 })
-        else
-            -- No save file
         end
+    end
+end
+
+function PlayState:textinput(t)
+    -- Pass text input to Chat
+    if Chat.textinput(t) then
+        return
     end
 end
 
@@ -283,6 +319,24 @@ function PlayState:mousereleased(x, y, button)
     end
 
     self.world.ui.cargo_drag.active = false
+end
+
+function PlayState:wheelmoved(x, y)
+    if not self.world or not self.world.camera then return end
+
+    local current_zoom = self.world.camera.scale
+    local new_zoom = current_zoom
+
+    if y > 0 then
+        new_zoom = current_zoom + Config.CAMERA_ZOOM_STEP
+    elseif y < 0 then
+        new_zoom = current_zoom - Config.CAMERA_ZOOM_STEP
+    end
+
+    -- Clamp zoom
+    new_zoom = math.max(Config.CAMERA_MIN_ZOOM, math.min(new_zoom, Config.CAMERA_MAX_ZOOM))
+
+    self.world.camera:zoomTo(new_zoom)
 end
 
 return PlayState

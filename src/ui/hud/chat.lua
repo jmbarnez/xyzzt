@@ -71,6 +71,11 @@ function Chat.isEnabled()
     return Chat.enabled
 end
 
+-- New helper to check if chat is currently focused/typing
+function Chat.isActive()
+    return Chat.active
+end
+
 function Chat.update(dt)
     if not Chat.enabled then return end
     -- Logic for fading or scrolling could go here
@@ -171,7 +176,7 @@ function Chat.keypressed(key)
             return true
         end
         
-        -- Consume all keys when chat is active
+        -- Consume all keys when chat is active so they don't trigger ship controls
         return true
     end
     
@@ -185,7 +190,7 @@ function Chat.textinput(t)
 
     if Chat.active then
         Chat.inputBuffer = Chat.inputBuffer .. t
-        return true
+        return true -- Consume input
     end
     return false
 end

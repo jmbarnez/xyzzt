@@ -2,6 +2,7 @@ local Config = require "src.config"
 
 return {
     name = "Starter Drone",
+
     -- Physics
     mass = 1,
     linear_damping = Config.LINEAR_DAMPING,
@@ -12,98 +13,170 @@ return {
         { x = 12, y = 0 },
     },
 
-    -- Vehicle
+    -- Vehicle Stats
     thrust = Config.THRUST,
     rotation_speed = Config.ROTATION_SPEED,
     max_speed = Config.MAX_SPEED,
-
-    -- Stats
     max_hull = 100,
     max_shield = 100,
-    shield_regen = 5, -- per second
+    shield_regen = 5,
 
-    -- Render
-    draw = function(color)
-        -- Main Body / Cockpit (central hexagon) - FILLED
-        love.graphics.setColor(0.2, 0.4, 0.8, 1) -- Blue fill
-        love.graphics.polygon("fill",
-            8, 0,                                -- front point
-            4, 3,                                -- top-right
-            -2, 3,                               -- back-right
-            -6, 0,                               -- back center
-            -2, -3,                              -- back-left
-            4, -3                                -- top-left
-        )
-        love.graphics.setColor(0, 0, 0, 1)       -- Black outline
-        love.graphics.polygon("line",
-            8, 0, 4, 3, -2, 3, -6, 0, -2, -3, 4, -3
-        )
+    -- Render Data (Data-Driven)
+    render_data = {
+        shapes = {
+            -- Main Hull (Forward Section)
+            {
+                type = "polygon",
+                color = { 0.2, 0.4, 0.8, 1 },
+                points = { 12, 0, 8, 2, 2, 3, -4, 3, -4, -3, 2, -3, 8, -2 },
+                outline = { 0, 0, 0, 1 }
+            },
 
-        -- Inner cockpit detail (darker blue)
-        love.graphics.setColor(0.1, 0.2, 0.5, 1)
-        love.graphics.polygon("fill",
-            4, 0, 1, 2, -3, 2, -3, -2, 1, -2
-        )
-        love.graphics.setColor(0, 0, 0, 1)
-        love.graphics.polygon("line",
-            4, 0, 1, 2, -3, 2, -3, -2, 1, -2
-        )
+            -- Central Body
+            {
+                type = "polygon",
+                color = { 0.18, 0.36, 0.72, 1 },
+                points = { 2, 4, -4, 4, -8, 3, -8, -3, -4, -4, 2, -4 },
+                outline = { 0, 0, 0, 1 }
+            },
 
-        -- Left Wing/Stabilizer - FILLED
-        love.graphics.setColor(0.2, 0.4, 0.8, 1)
-        love.graphics.polygon("fill",
-            -2, 3, -4, 8, -6, 8, -5, 3
-        )
-        love.graphics.setColor(0, 0, 0, 1)
-        love.graphics.polygon("line",
-            -2, 3, -4, 8, -6, 8, -5, 3
-        )
+            -- Cockpit Canopy
+            {
+                type = "polygon",
+                color = { 0.1, 0.3, 0.6, 1 },
+                points = { 8, 0, 6, 1.5, 3, 2, 0, 2, 0, -2, 3, -2, 6, -1.5 },
+                outline = { 0.05, 0.15, 0.4, 1 }
+            },
 
-        -- Right Wing/Stabilizer - FILLED
-        love.graphics.setColor(0.2, 0.4, 0.8, 1)
-        love.graphics.polygon("fill",
-            -2, -3, -4, -8, -6, -8, -5, -3
-        )
-        love.graphics.setColor(0, 0, 0, 1)
-        love.graphics.polygon("line",
-            -2, -3, -4, -8, -6, -8, -5, -3
-        )
+            -- Cockpit Detail
+            {
+                type = "circle",
+                color = { 0.3, 0.5, 1, 0.8 },
+                x = 5,
+                y = 0,
+                radius = 1,
+                outline = { 0.1, 0.2, 0.5, 1 }
+            },
 
-        -- Left Engine Pod - FILLED
-        love.graphics.setColor(0.15, 0.3, 0.6, 1) -- Darker blue for engines
-        love.graphics.rectangle("fill", -8, 6, 4, 3)
-        love.graphics.setColor(0, 0, 0, 1)
-        love.graphics.rectangle("line", -8, 6, 4, 3)
-        love.graphics.line(-8, 7.5, -4, 7.5) -- engine detail line
+            -- Left Wing
+            {
+                type = "polygon",
+                color = { 0.2, 0.4, 0.8, 1 },
+                points = { 0, 4, -6, 7, -10, 9, -10, 4, -6, 3 },
+                outline = { 0, 0, 0, 1 }
+            },
 
-        -- Right Engine Pod - FILLED
-        love.graphics.setColor(0.15, 0.3, 0.6, 1)
-        love.graphics.rectangle("fill", -8, -9, 4, 3)
-        love.graphics.setColor(0, 0, 0, 1)
-        love.graphics.rectangle("line", -8, -9, 4, 3)
-        love.graphics.line(-8, -7.5, -4, -7.5) -- engine detail line
+            -- Right Wing
+            {
+                type = "polygon",
+                color = { 0.2, 0.4, 0.8, 1 },
+                points = { 0, -4, -6, -7, -10, -9, -10, -4, -6, -3 },
+                outline = { 0, 0, 0, 1 }
+            },
 
-        -- Thruster Exhaust (glowing orange/yellow)
-        love.graphics.setColor(1, 0.6, 0.2, 0.8)
-        love.graphics.setLineWidth(2)
-        love.graphics.line(-8, 7, -10, 7)
-        love.graphics.line(-8, 8, -10, 8)
-        love.graphics.line(-8, -7, -10, -7)
-        love.graphics.line(-8, -8, -10, -8)
-        love.graphics.setLineWidth(1)
+            -- Left Wing Strut
+            {
+                type = "polygon",
+                color = { 0.15, 0.3, 0.6, 1 },
+                points = { -3, 3.5, -8, 5, -8, 4, -3, 3 },
+                outline = { 0, 0, 0, 1 }
+            },
 
-        -- Front sensors/weapons
-        love.graphics.setColor(0.1, 0.2, 0.5, 1)
-        love.graphics.circle("fill", 12, 0, 1.5)
-        love.graphics.setColor(0, 0, 0, 1)
-        love.graphics.line(8, 0, 12, 0)
-        love.graphics.circle("line", 12, 0, 1.5)
+            -- Right Wing Strut
+            {
+                type = "polygon",
+                color = { 0.15, 0.3, 0.6, 1 },
+                points = { -3, -3.5, -8, -5, -8, -4, -3, -3 },
+                outline = { 0, 0, 0, 1 }
+            },
 
-        -- Technical details on wings (black lines)
-        love.graphics.line(-3.5, 5.5, -5, 6)
-        love.graphics.line(-3.5, -5.5, -5, -6)
+            -- Left Engine Nacelle
+            {
+                type = "polygon",
+                color = { 0.15, 0.3, 0.6, 1 },
+                points = { -6, 7, -11, 7.5, -12, 8.5, -12, 9.5, -10, 9.5, -8, 8 },
+                outline = { 0, 0, 0, 1 }
+            },
 
-        -- Center line detail
-        love.graphics.line(-2, 0, 0, 0)
-    end
+            -- Right Engine Nacelle
+            {
+                type = "polygon",
+                color = { 0.15, 0.3, 0.6, 1 },
+                points = { -6, -7, -11, -7.5, -12, -8.5, -12, -9.5, -10, -9.5, -8, -8 },
+                outline = { 0, 0, 0, 1 }
+            },
+
+            -- Left Engine Glow
+            {
+                type = "circle",
+                color = { 0.4, 0.6, 1, 0.6 },
+                x = -12,
+                y = 9,
+                radius = 0.8,
+                outline = { 0.2, 0.4, 0.8, 1 }
+            },
+
+            -- Right Engine Glow
+            {
+                type = "circle",
+                color = { 0.4, 0.6, 1, 0.6 },
+                x = -12,
+                y = -9,
+                radius = 0.8,
+                outline = { 0.2, 0.4, 0.8, 1 }
+            },
+
+            -- Left Weapon Pod
+            {
+                type = "polygon",
+                color = { 0.12, 0.25, 0.5, 1 },
+                points = { -9, 5, -11, 5.5, -11, 6.5, -9, 6.5 },
+                outline = { 0, 0, 0, 1 }
+            },
+
+            -- Right Weapon Pod
+            {
+                type = "polygon",
+                color = { 0.12, 0.25, 0.5, 1 },
+                points = { -9, -5, -11, -5.5, -11, -6.5, -9, -6.5 },
+                outline = { 0, 0, 0, 1 }
+            },
+
+            -- Nose Sensor
+            {
+                type = "circle",
+                color = { 0.3, 0.5, 1, 1 },
+                x = 12,
+                y = 0,
+                radius = 1.2,
+                outline = { 0, 0, 0, 1 }
+            },
+
+            -- Nose Sensor Detail
+            {
+                type = "circle",
+                color = { 0.5, 0.7, 1, 1 },
+                x = 12,
+                y = 0,
+                radius = 0.6,
+                outline = { 0.1, 0.2, 0.5, 1 }
+            },
+
+            -- Left Hull Accent
+            {
+                type = "polygon",
+                color = { 0.25, 0.45, 0.85, 1 },
+                points = { 4, 2, 0, 2.5, -2, 2.5, -2, 1.5, 0, 1.5, 4, 1 },
+                outline = { 0, 0, 0, 0 }
+            },
+
+            -- Right Hull Accent
+            {
+                type = "polygon",
+                color = { 0.25, 0.45, 0.85, 1 },
+                points = { 4, -2, 0, -2.5, -2, -2.5, -2, -1.5, 0, -1.5, 4, -1 },
+                outline = { 0, 0, 0, 0 }
+            }
+        }
+    }
 }

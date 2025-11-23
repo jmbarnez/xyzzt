@@ -46,6 +46,9 @@ Concord.component("render", function(c, arg)
             if arg.shape then
                 c.shape = arg.shape
             end
+            if arg.shapes then
+                c.shapes = arg.shapes
+            end
         else
             c.color = arg
         end
