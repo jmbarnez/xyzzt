@@ -152,10 +152,21 @@ end)
 
 -- Collision layers for spatial grid
 
-Concord.component("trail", function(c, length, width, color)
-    c.length = length or 0.5 -- Duration in seconds
-    c.width = width or 10
-    c.color = color or { 0, 1, 1, 1 }
-    c.points = {} -- List of {x, y, time}
-    c.mesh = nil  -- Love2D mesh
+Concord.component("trail", function(c, config_list)
+    -- config_list is a list of { x, y, width, length, color }
+    c.trails = {}
+
+    if config_list then
+        for _, cfg in ipairs(config_list) do
+            table.insert(c.trails, {
+                offset_x = cfg.x or 0,
+                offset_y = cfg.y or 0,
+                width = cfg.width or 10,
+                length = cfg.length or 0.5,
+                color = cfg.color or { 0, 1, 1, 1 },
+                points = {},
+                mesh = nil
+            })
+        end
+    end
 end)

@@ -17,7 +17,7 @@ function TrailSystem:update(dt)
     end
 
     for _, e in ipairs(self.pool) do
-        local trail = e.trail
+        local trail_comp = e.trail
         local transform = e.transform
         local vehicle = e.vehicle
 
@@ -25,98 +25,98 @@ function TrailSystem:update(dt)
         -- For now, let's add points if thrusting or moving fast enough
         local is_moving = (e.input and e.input.thrust) or (vehicle and vehicle.speed and vehicle.speed > 10)
 
-        -- Calculate rear of the ship based on rotation
-        -- Assuming ship radius is roughly 10-15, engine is at the back
-        local offset_dist = 15
-        local angle = transform.r
-        local rear_x = transform.x - math.cos(angle) * offset_dist
-        local rear_y = transform.y - math.sin(angle) * offset_dist
+        if trail_comp.trails then
+            for _, trail in ipairs(trail_comp.trails) do
+                -- Calculate world position of this engine mount
+                -- Transform local offset (trail.offset_x, trail.offset_y) by ship transform
+                local angle = transform.r
+                local cos_a = math.cos(angle)
+                local sin_a = math.sin(angle)
 
-        -- Add new point
-        table.insert(trail.points, 1, {
-            x = rear_x,
-            y = rear_y,
-            time = time,
-            angle = angle
-        })
+                local world_x = transform.x + (trail.offset_x * cos_a - trail.offset_y * sin_a)
+                local world_y = transform.y + (trail.offset_x * sin_a + trail.offset_y * cos_a)
 
-        -- Remove old points
-        for i = #trail.points, 1, -1 do
-            local p = trail.points[i]
-            if time - p.time > trail.length then
-                table.remove(trail.points, i)
-            end
-        end
+                -- Add new point
+                table.insert(trail.points, 1, {
+                    x = world_x,
+                    y = world_y,
+                    time = time,
+                    angle = angle
+                })
 
-        -- Update Mesh
-        if #trail.points >= 2 then
-            local vertices = {}
-
-            for i, p in ipairs(trail.points) do
-                local age = time - p.time
-                local life_pct = age / trail.length
-
-                -- Texture coordinates: u = life_pct (0 at head, 1 at tail)
-                local u = life_pct
-
-                -- Width tapers slightly at the end?
-                local w = trail.width * (1.0 - life_pct * 0.5)
-
-                -- Perpendicular vector for width
-                -- Use the point's angle (direction of ship when point was created)
-                -- Or calculate normal from path? Path normal is smoother for curves.
-                local perp_x, perp_y
-
-                if i < #trail.points then
-                    local next_p = trail.points[i + 1]
-                    local dx = next_p.x - p.x
-                    local dy = next_p.y - p.y
-                    local len = math.sqrt(dx * dx + dy * dy)
-                    if len > 0 then
-                        perp_x = -dy / len
-                        perp_y = dx / len
-                    else
-                        perp_x = -math.sin(p.angle)
-                        perp_y = math.cos(p.angle)
+                -- Remove old points
+                for i = #trail.points, 1, -1 do
+                    local p = trail.points[i]
+                    if time - p.time > trail.length then
+                        table.remove(trail.points, i)
                     end
-                else
-                    perp_x = -math.sin(p.angle)
-                    perp_y = math.cos(p.angle)
                 end
 
-                -- Left vertex
-                table.insert(vertices, {
-                    p.x + perp_x * w * 0.5,
-                    p.y + perp_y * w * 0.5,
-                    u, 0,      -- u, v
-                    1, 1, 1, 1 -- r, g, b, a
-                })
+                -- Update Mesh
+                if #trail.points >= 2 then
+                    local vertices = {}
 
-                -- Right vertex
-                table.insert(vertices, {
-                    p.x - perp_x * w * 0.5,
-                    p.y - perp_y * w * 0.5,
-                    u, 1, -- u, v
-                    1, 1, 1, 1
-                })
-            end
+                    for i, p in ipairs(trail.points) do
+                        local age = time - p.time
+                        local life_pct = age / trail.length
 
-            -- Create or update mesh
-            -- We need a strip of triangles
-            -- Vertices are arranged: L1, R1, L2, R2, ...
-            -- Love2D "strip" draw mode works with this order
+                        -- Texture coordinates: u = life_pct (0 at head, 1 at tail)
+                        local u = life_pct
 
-            if not trail.mesh then
-                trail.mesh = love.graphics.newMesh(vertices, "strip", "dynamic")
-                trail.mesh:setTexture(love.graphics.newCanvas(1, 1)) -- Dummy texture
-            else
-                -- Check if we need to resize (recreate) the mesh
-                if #vertices > trail.mesh:getVertexCount() then
-                    trail.mesh = love.graphics.newMesh(vertices, "strip", "dynamic")
-                    trail.mesh:setTexture(love.graphics.newCanvas(1, 1))
-                else
-                    trail.mesh:setVertices(vertices)
-                    trail.mesh:setDrawRange(1, #vertices)
+                        -- Width tapers slightly at the end?
+                        local w = trail.width * (1.0 - life_pct * 0.5)
+
+                        -- Perpendicular vector for width
+                        local perp_x, perp_y
+
+                        if i < #trail.points then
+                            local next_p = trail.points[i + 1]
+                            local dx = next_p.x - p.x
+                            local dy = next_p.y - p.y
+                            local len = math.sqrt(dx * dx + dy * dy)
+                            if len > 0 then
+                                perp_x = -dy / len
+                                perp_y = dx / len
+                            else
+                                perp_x = -math.sin(p.angle)
+                                perp_y = math.cos(p.angle)
+                            end
+                        else
+                            perp_x = -math.sin(p.angle)
+                            perp_y = math.cos(p.angle)
+                        end
+
+                        -- Left vertex
+                        table.insert(vertices, {
+                            p.x + perp_x * w * 0.5,
+                            p.y + perp_y * w * 0.5,
+                            u, 0,      -- u, v
+                            1, 1, 1, 1 -- r, g, b, a
+                        })
+
+                        -- Right vertex
+                        table.insert(vertices, {
+                            p.x - perp_x * w * 0.5,
+                            p.y - perp_y * w * 0.5,
+                            u, 1, -- u, v
+                            1, 1, 1, 1
+                        })
+                    end
+
+                    -- Create or update mesh
+                    if not trail.mesh then
+                        trail.mesh = love.graphics.newMesh(vertices, "strip", "dynamic")
+                        trail.mesh:setTexture(love.graphics.newCanvas(1, 1)) -- Dummy texture
+                    else
+                        -- Check if we need to resize (recreate) the mesh
+                        if #vertices > trail.mesh:getVertexCount() then
+                            trail.mesh = love.graphics.newMesh(vertices, "strip", "dynamic")
+                            trail.mesh:setTexture(love.graphics.newCanvas(1, 1))
+                        else
+                            trail.mesh:setVertices(vertices)
+                            trail.mesh:setDrawRange(1, #vertices)
+                        end
+                    end
                 end
             end
         end

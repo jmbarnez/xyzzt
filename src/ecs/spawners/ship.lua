@@ -40,9 +40,26 @@ function ShipManager.spawn(world, ship_def, x, y, is_host_player)
     if is_host_player then
         ship:give("name", Config.PLAYER_NAME or "Player")
         ship:give("pilot")
-        -- Add engine trail
-        ship:give("trail", 0.6, 12, { 0, 1, 1, 1 })
     end
+
+    -- Add trail component
+    -- Define engine mounts based on ship type or procedural data
+    local engine_mounts = {}
+
+    if data.engine_mounts then
+        engine_mounts = data.engine_mounts
+    else
+        -- Default single engine at rear
+        table.insert(engine_mounts, {
+            x = -15, -- Offset behind center
+            y = 0,
+            width = 10,
+            length = 0.5,
+            color = { 0, 1, 1, 1 } -- Cyan
+        })
+    end
+
+    ship:give("trail", engine_mounts)
 
     ship:give("input")
     ship:give("weapon", "pulse_laser", data.weapon_mounts or { { x = data.radius, y = 0 } })

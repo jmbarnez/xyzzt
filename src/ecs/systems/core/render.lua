@@ -72,14 +72,15 @@ function RenderSystem:draw()
                 goto continue
             end
 
+
             -- Calculate Sector Difference
             local diff_x = s.x - (cam_sector_x or 0)
             local diff_y = s.y - (cam_sector_y or 0)
 
             -- Optimization: Only draw entities in neighbor sectors
             if math.abs(diff_x) <= 1 and math.abs(diff_y) <= 1 then
-                -- Draw Trail (World Space)
-                if e.trail and e.trail.mesh then
+                -- Draw Trails (World Space)
+                if e.trail and e.trail.trails then
                     if not trailShader then
                         local shader_path = "assets/shaders/engine_trail.glsl"
                         if love.filesystem.getInfo(shader_path) then
@@ -99,7 +100,13 @@ function RenderSystem:draw()
                     end
 
                     love.graphics.setColor(1, 1, 1, 1)
-                    love.graphics.draw(e.trail.mesh)
+
+                    for _, trail in ipairs(e.trail.trails) do
+                        if trail.mesh then
+                            love.graphics.draw(trail.mesh)
+                        end
+                    end
+
                     love.graphics.setShader()
 
                     love.graphics.pop()
