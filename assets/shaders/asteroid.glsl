@@ -76,57 +76,25 @@ float voronoi(vec2 p)
 vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 screen_coords)
 {
     // Unique position per asteroid using seed
-    vec2 pos = (vTexCoord + seed * 13.7) * 8.0;
+    vec2 pos = (vTexCoord + seed * 13.7) * 4.0;
     
-    // Large-scale rocky structure
-    float structure = fbm(pos * 0.8, 5);
+    // Large-scale rocky structure - reduced octaves for smoother look
+    float structure = fbm(pos, 3);
     
-    // Medium-scale surface detail
-    float surface = fbm(pos * 2.5 + vec2(structure * 0.3), 4);
-    
-    // Fine grain and micro-details
-    float grain = fbm(pos * 8.0 + vec2(surface * 0.2), 3);
-    
-    // Voronoi pattern for chunky rock segments
-    float chunks = voronoi(pos * 1.2 + seed * 7.3);
-    chunks = smoothstep(0.15, 0.45, chunks);
-    
-    // Deep craters and impact marks
-    float craters = fbm(pos * 1.8 + vec2(11.3, 7.9), 4);
-    craters = smoothstep(0.35, 0.55, craters);
-    float craterDepth = (1.0 - craters) * 0.35;
-    
-    // Bright mineral veins
-    float veins = fbm(pos * 4.5 + vec2(23.1, 17.6), 3);
-    veins = smoothstep(0.65, 0.75, veins);
-    float veinBrightness = veins * 0.25;
-    
-    // Subtle color variation
-    float colorShift = fbm(pos * 1.2 + vec2(31.4, 19.2), 3) * 0.15;
+    // Subtle surface variation
+    float surface = fbm(pos * 2.0 + vec2(structure), 2);
     
     // Build final color
     vec3 baseColor = color.rgb;
     
-    // Apply structure variation
-    baseColor = baseColor * (0.85 + structure * 0.3);
+    // Apply structure variation - much softer than before
+    baseColor = baseColor * (0.9 + structure * 0.2);
     
-    // Add chunky rock segments
-    baseColor = baseColor * (0.92 + chunks * 0.16);
+    // Add subtle surface detail
+    baseColor = baseColor * (0.95 + surface * 0.1);
     
-    // Apply craters (darkening)
-    baseColor = baseColor * (1.0 - craterDepth);
-    
-    // Add mineral veins (brightening)
-    baseColor = baseColor + baseColor * veinBrightness;
-    
-    // Surface detail and grain
-    baseColor = baseColor * (0.88 + surface * 0.18 + grain * 0.06);
-    
-    // Color variation for interest
-    baseColor = mix(baseColor, baseColor * vec3(1.05, 0.98, 0.95), colorShift);
-    
-    // Slight contrast boost
-    baseColor = pow(baseColor, vec3(0.92));
+    // Slight contrast adjustment for "solid" feel
+    baseColor = pow(baseColor, vec3(1.1));
     
     return vec4(baseColor, color.a);
 }
