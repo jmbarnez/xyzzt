@@ -3,6 +3,22 @@ local Config    = require "src.config"
 
 local Asteroids = {}
 
+local AsteroidTypes = {
+	rocky = {
+		name = "Rocky Asteroid",
+		composition = { stone = 1.0 },
+	},
+	metallic = {
+		name = "Metallic Asteroid",
+		composition = { stone = 0.5, iron = 0.5 },
+	},
+}
+
+local AsteroidTypeList = {
+	AsteroidTypes.rocky,
+	AsteroidTypes.metallic,
+}
+
 local function spawn_single(world, sector_x, sector_y, x, y, radius, color)
     local body = love.physics.newBody(world.physics_world, x, y, "dynamic")
     body:setLinearDamping(Config.LINEAR_DAMPING * 2)
@@ -141,8 +157,20 @@ function Asteroids.spawnField(world, sector_x, sector_y, seed, count)
         end
 
         local asteroid = spawn_single(world, sector_x or 0, sector_y or 0, x, y, radius, color)
-        if asteroid and not asteroid.asteroid_composition then
-            asteroid:give("asteroid_composition", { stone = 1.0 })
+        if asteroid then
+            local at
+            if type(rng) == "table" and rng.random then
+                at = AsteroidTypeList[rng:random(1, #AsteroidTypeList)]
+            else
+                at = AsteroidTypeList[math.random(1, #AsteroidTypeList)]
+            end
+
+            if at then
+                asteroid:give("asteroid_composition", at.composition)
+                if not asteroid.name then
+                    asteroid:give("name", at.name)
+                end
+            end
         end
     end
 end

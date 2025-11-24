@@ -19,8 +19,7 @@ local function collect_item(item, collector)
     local itemComp = item.item
     if not itemComp then return end
 
-    if itemComp.name == "Stone" then
-        -- Try to add to cargo
+    if itemComp.type == "resource" then
         if collector.cargo then
             local cargo = collector.cargo
             local item_vol = itemComp.volume or 1.0
@@ -28,15 +27,13 @@ local function collect_item(item, collector)
             if (cargo.current + item_vol) <= cargo.capacity then
                 cargo.current = cargo.current + item_vol
 
-                -- Handle Mass
                 local item_mass = 0
                 if item.physics and item.physics.body then
                     item_mass = item.physics.body:getMass()
                 end
                 cargo.mass = (cargo.mass or 0) + item_mass
-                cargo.items["Stone"] = (cargo.items["Stone"] or 0) + 1
+                cargo.items[itemComp.name] = (cargo.items[itemComp.name] or 0) + 1
 
-                -- Update Ship Physics Mass
                 if collector.physics and collector.physics.body then
                     local body = collector.physics.body
                     local current_mass = body:getMass()
@@ -46,7 +43,7 @@ local function collect_item(item, collector)
                 print("Cargo: " .. cargo.current .. "/" .. cargo.capacity .. " Vol | Mass: " .. cargo.mass)
             else
                 print("Cargo full! (" .. cargo.current .. "/" .. cargo.capacity .. ")")
-                return -- Don't destroy item if cargo is full
+                return
             end
         end
     else

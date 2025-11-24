@@ -6,20 +6,6 @@ local CargoPanel = {}
 -- Cache for item icon shapes to prevent regeneration each frame
 local icon_shape_cache = {}
 
--- Helper to draw a simple horizontal capacity bar
-local function drawBar(x, y, width, height, current, max, colorFill, colorBg)
-    local pct = 0
-    if max and max > 0 then
-        pct = math.max(0, math.min(1, (current or 0) / max))
-    end
-
-    love.graphics.setColor(colorBg)
-    love.graphics.rectangle("fill", x, y, width, height, 0, 0)
-
-    love.graphics.setColor(colorFill)
-    love.graphics.rectangle("fill", x, y, width * pct, height, 0, 0)
-end
-
 function CargoPanel.getWindowRect(world)
     local sw, sh = love.graphics.getDimensions()
 
@@ -63,7 +49,6 @@ function CargoPanel.draw(world, player)
     local used = cargo.current or 0
     local capacity = cargo.capacity or 0
     local mass = cargo.mass or 0
-    local bottomText = string.format("Vol: %d/%d | Mass: %.1f", math.floor(used), math.floor(capacity), mass)
 
     local wx, wy, ww, wh = CargoPanel.getWindowRect(world)
 
@@ -73,9 +58,57 @@ function CargoPanel.draw(world, player)
         width = ww,
         height = wh,
         title = "Cargo",
-        bottomText = bottomText,
+        bottomText = "",
         showClose = true,
     })
+
+    -- Draw custom bottom bar with volume/mass info and capacity bar
+    local bottomBar = layout.bottomBar
+    local fontLabel = Theme.getFont("chat")
+    love.graphics.setFont(fontLabel)
+
+    -- Volume and mass text with proper units
+    local infoText = string.format("Volume: %.1f/%.1f m³  |  Mass: %.1f kg", used, capacity, mass)
+    love.graphics.setColor(Theme.colors.textPrimary or { 0.9, 0.95, 1.0, 1.0 })
+    love.graphics.print(infoText, bottomBar.x + 10, bottomBar.y + 4)
+
+    -- Capacity bar on the right side of bottom bar
+    local barWidth = 150
+    local barHeight = 14
+    local barX = bottomBar.x + bottomBar.w - barWidth - 10
+    local barY = bottomBar.y + (bottomBar.h - barHeight) * 0.5
+
+    local pct = 0
+    if capacity > 0 then
+        pct = math.max(0, math.min(1, used / capacity))
+    end
+
+    -- Bar background
+    love.graphics.setColor(0.08, 0.05, 0.07, 0.9)
+    love.graphics.rectangle("fill", barX, barY, barWidth, barHeight, 2, 2)
+
+    -- Bar fill
+    if pct > 0 then
+        local fillColor = { 0.3, 0.8, 0.95, 0.95 }
+        if pct > 0.9 then
+            fillColor = { 0.95, 0.25, 0.25, 0.95 }
+        elseif pct > 0.7 then
+            fillColor = { 0.95, 0.7, 0.25, 0.95 }
+        end
+        love.graphics.setColor(fillColor)
+        love.graphics.rectangle("fill", barX, barY, barWidth * pct, barHeight, 2, 2)
+    end
+
+    -- Bar outline
+    love.graphics.setColor(0.3, 0.3, 0.35, 0.9)
+    love.graphics.setLineWidth(1)
+    love.graphics.rectangle("line", barX, barY, barWidth, barHeight, 2, 2)
+
+    -- Percentage text on bar
+    local pctText = string.format("%d%%", math.floor(pct * 100))
+    local pctTextW = fontLabel:getWidth(pctText)
+    love.graphics.setColor(1, 1, 1, 0.95)
+    love.graphics.print(pctText, barX + (barWidth - pctTextW) * 0.5, barY + 1)
 
     local content = layout.content
     local cx, cy, cw, ch = content.x, content.y, content.w, content.h

@@ -112,22 +112,6 @@ function RenderSystem:draw()
                 love.graphics.push()
                 love.graphics.translate(relative_x, relative_y)
 
-                local is_self = (target_entity ~= nil and e == target_entity)
-
-                if (not is_self) and e.name and e.name.value and e.name.value ~= "" then
-                    local name = e.name.value
-                    if not nameFont then
-                        nameFont = love.graphics.newFont(12)
-                    end
-                    local prevFont = love.graphics.getFont()
-                    love.graphics.setFont(nameFont)
-                    local textWidth = nameFont:getWidth(name)
-                    local textHeight = nameFont:getHeight()
-                    love.graphics.setColor(1, 1, 1, 1)
-                    love.graphics.print(name, -textWidth * 0.5, -(20 + textHeight))
-                    love.graphics.setFont(prevFont)
-                end
-
                 -- Health bar rendering for ALL entities with hp component (before rotation)
                 if e.hp and e.hp.max and e.hp.current and e.hp.current < e.hp.max and e.hp.last_hit_time then
                     local now = (love and love.timer and love.timer.getTime) and love.timer.getTime() or nil

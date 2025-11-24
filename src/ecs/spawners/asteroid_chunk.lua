@@ -1,12 +1,11 @@
 local Concord = require "concord"
 local ChunkTypes = require "src.data.chunks"
+local ItemSpawners = require "src.ecs.spawners.item"
 
 local AsteroidChunkSpawner = {}
 local MIN_CHUNK_RADIUS = 6
-local MIN_PARENT_RADIUS_FOR_CHUNKS = 20
 local BASE_UNIT_RADIUS = MIN_CHUNK_RADIUS
 local BASE_UNIT_AREA = math.pi * BASE_UNIT_RADIUS * BASE_UNIT_RADIUS
-AsteroidChunkSpawner.MIN_PARENT_RADIUS_FOR_CHUNKS = MIN_PARENT_RADIUS_FOR_CHUNKS
 
 -- Spawn asteroid chunks when an asteroid is destroyed
 -- @param world: ECS world
@@ -22,9 +21,6 @@ function AsteroidChunkSpawner.spawn(world, parent_entity, num_chunks)
     if not (transform and sector and render) then return end
 
     local parent_radius = render.radius or 10
-    if (not num_chunks) and parent_radius < MIN_PARENT_RADIUS_FOR_CHUNKS then
-        return
-    end
     local parent_color = render.color or { 0.6, 0.6, 0.6, 1 }
 
     local composition_map
@@ -90,10 +86,7 @@ function AsteroidChunkSpawner.spawn(world, parent_entity, num_chunks)
 
         -- Varied chunk sizes (40% to 120% of base)
         local size_variation = 0.4 + rng:random() * 0.8
-        local chunk_radius = base_chunk_radius * size_variation
-        if chunk_radius < MIN_CHUNK_RADIUS then
-            chunk_radius = MIN_CHUNK_RADIUS
-        end
+        local raw_chunk_radius = base_chunk_radius * size_variation
 
         -- Random angle for radial distribution with more jitter
         local base_angle = (math.pi * 2 / num_chunks) * i
@@ -110,72 +103,100 @@ function AsteroidChunkSpawner.spawn(world, parent_entity, num_chunks)
         local spawn_x = transform.x + math.cos(angle) * radial_distance + math.cos(angle + math.pi / 2) * perp_offset
         local spawn_y = transform.y + math.sin(angle) * radial_distance + math.sin(angle + math.pi / 2) * perp_offset
 
-        -- Create chunk entity
-        local chunk = Concord.entity(world)
-        chunk:give("transform", spawn_x, spawn_y, rng:random() * math.pi * 2)
-        chunk:give("sector", sector.x, sector.y)
-
-        -- Generate random convex polygon for chunk (4-6 vertices)
-        local vertex_count = math.random(4, 6)
-        local vertices = {}
-        for v = 1, vertex_count do
-            local v_angle = (v / vertex_count) * math.pi * 2 + (rng:random() - 0.5) * 0.5
-            local v_radius = chunk_radius * (0.8 + rng:random() * 0.4)
-            table.insert(vertices, math.cos(v_angle) * v_radius)
-            table.insert(vertices, math.sin(v_angle) * v_radius)
-        end
-
         local chunk_def = ChunkTypes[resource_type] or ChunkTypes.stone
-        local chunk_color = chunk_def.color or parent_color
 
-        local area = math.pi * chunk_radius * chunk_radius
-        local area_ratio = area / BASE_UNIT_AREA
-        local yield_scale = chunk_def.yield_per_unit_area or 2.0
-        local units = math.max(1, math.floor(math.sqrt(area_ratio) * yield_scale + 0.5))
+        -- If this chunk would be smaller than the minimum radius, drop items directly
+        if raw_chunk_radius < MIN_CHUNK_RADIUS then
+            local radius_for_volume = raw_chunk_radius
+            if radius_for_volume <= 0 then
+                radius_for_volume = MIN_CHUNK_RADIUS * 0.5
+            end
 
-        chunk:give("render", {
-            render_type = "asteroid_chunk",
-            color = chunk_color,
-            radius = chunk_radius,
-            vertices = vertices, -- Store vertices for rendering
-            seed = seed          -- Pass parent seed for texture consistency
-        })
-        chunk:give("asteroid_chunk")
-        chunk:give("chunk_resource", resource_type, units)
+            local area = math.pi * radius_for_volume * radius_for_volume
+            local area_ratio = area / BASE_UNIT_AREA
+            local yield_scale = chunk_def.yield_per_unit_area or 2.0
+            local units = math.max(1, math.floor(math.sqrt(area_ratio) * yield_scale + 0.5))
 
-        -- Give chunks HP so they can be destroyed
-        local hp_max = math.floor(chunk_radius * 1.5)
-        chunk:give("hp", hp_max)
+            local chunk_volume = (math.pi * radius_for_volume * radius_for_volume) / 100.0
+            local chunk_mass = chunk_volume * 2.0
 
-        -- Create physics body for chunk
-        local chunk_body = love.physics.newBody(world.physics_world, spawn_x, spawn_y, "dynamic")
-        chunk_body:setLinearDamping(1.0)
-        chunk_body:setAngularDamping(1.0)
+            local item_volume = chunk_volume / units
+            local item_mass = chunk_mass / units
 
-        -- Use the same vertices for physics shape
-        local chunk_shape = love.physics.newPolygonShape(vertices)
-        local chunk_fixture = love.physics.newFixture(chunk_body, chunk_shape, 0.5)
-        chunk_fixture:setRestitution(0.2)
-        chunk_fixture:setUserData(chunk)
+            local item_id = chunk_def.item_id or "stone"
 
-        chunk:give("physics", chunk_body, chunk_shape, chunk_fixture)
+            for j = 1, units do
+                ItemSpawners.spawn_item(world, item_id, spawn_x, spawn_y, sector.x, sector.y, item_volume, item_mass)
+            end
+        else
+            local chunk_radius = raw_chunk_radius
 
-        -- Velocity varies by size (smaller chunks move faster)
-        local base_speed = 80 + rng:random() * 120             -- 80-200 units/sec
-        local size_speed_factor = 1.5 - (size_variation * 0.5) -- Smaller = faster
-        local speed = base_speed * size_speed_factor
+            -- Generate random convex polygon for chunk (4-6 vertices)
+            local vertex_count = math.random(4, 6)
+            local vertices = {}
+            for v = 1, vertex_count do
+                local v_angle = (v / vertex_count) * math.pi * 2 + (rng:random() - 0.5) * 0.5
+                local v_radius = chunk_radius * (0.8 + rng:random() * 0.4)
+                table.insert(vertices, math.cos(v_angle) * v_radius)
+                table.insert(vertices, math.sin(v_angle) * v_radius)
+            end
 
-        -- Add tangential velocity component for spin effect
-        local tangential_speed = speed * 0.3 * (rng:random() - 0.5)
+            local chunk_color = chunk_def.color or parent_color
 
-        local vel_x = math.cos(angle) * speed + math.cos(angle + math.pi / 2) * tangential_speed
-        local vel_y = math.sin(angle) * speed + math.sin(angle + math.pi / 2) * tangential_speed
+            local area = math.pi * chunk_radius * chunk_radius
+            local area_ratio = area / BASE_UNIT_AREA
+            local yield_scale = chunk_def.yield_per_unit_area or 2.0
+            local units = math.max(1, math.floor(math.sqrt(area_ratio) * yield_scale + 0.5))
 
-        chunk_body:setLinearVelocity(vel_x, vel_y)
+            -- Create chunk entity
+            local chunk = Concord.entity(world)
+            chunk:give("transform", spawn_x, spawn_y, rng:random() * math.pi * 2)
+            chunk:give("sector", sector.x, sector.y)
 
-        -- Angular velocity proportional to linear speed
-        local angular_vel = (rng:random() - 0.5) * (speed / 30)
-        chunk_body:setAngularVelocity(angular_vel)
+            chunk:give("render", {
+                render_type = "asteroid_chunk",
+                color = chunk_color,
+                radius = chunk_radius,
+                vertices = vertices, -- Store vertices for rendering
+                seed = seed          -- Pass parent seed for texture consistency
+            })
+            chunk:give("asteroid_chunk")
+            chunk:give("chunk_resource", resource_type, units)
+
+            -- Give chunks HP so they can be destroyed
+            local hp_max = math.floor(chunk_radius * 1.5)
+            chunk:give("hp", hp_max)
+
+            -- Create physics body for chunk
+            local chunk_body = love.physics.newBody(world.physics_world, spawn_x, spawn_y, "dynamic")
+            chunk_body:setLinearDamping(1.0)
+            chunk_body:setAngularDamping(1.0)
+
+            -- Use the same vertices for physics shape
+            local chunk_shape = love.physics.newPolygonShape(vertices)
+            local chunk_fixture = love.physics.newFixture(chunk_body, chunk_shape, 0.5)
+            chunk_fixture:setRestitution(0.2)
+            chunk_fixture:setUserData(chunk)
+
+            chunk:give("physics", chunk_body, chunk_shape, chunk_fixture)
+
+            -- Velocity varies by size (smaller chunks move faster)
+            local base_speed = 80 + rng:random() * 120             -- 80-200 units/sec
+            local size_speed_factor = 1.5 - (size_variation * 0.5) -- Smaller = faster
+            local speed = base_speed * size_speed_factor
+
+            -- Add tangential velocity component for spin effect
+            local tangential_speed = speed * 0.3 * (rng:random() - 0.5)
+
+            local vel_x = math.cos(angle) * speed + math.cos(angle + math.pi / 2) * tangential_speed
+            local vel_y = math.sin(angle) * speed + math.sin(angle + math.pi / 2) * tangential_speed
+
+            chunk_body:setLinearVelocity(vel_x, vel_y)
+
+            -- Angular velocity proportional to linear speed
+            local angular_vel = (rng:random() - 0.5) * (speed / 30)
+            chunk_body:setAngularVelocity(angular_vel)
+        end
     end
 end
 

@@ -5,7 +5,7 @@ local ItemDefinitions = require "src.data.items"
 local ItemSpawners = {}
 
 -- Generic item spawner that uses item definitions
-function ItemSpawners.spawn_item(world, item_id, x, y, sector_x, sector_y)
+function ItemSpawners.spawn_item(world, item_id, x, y, sector_x, sector_y, volume_override, mass_override)
     if not world then return end
 
     local item_def = ItemDefinitions[item_id]
@@ -28,8 +28,9 @@ function ItemSpawners.spawn_item(world, item_id, x, y, sector_x, sector_y)
         shape = vertices
     })
 
-    -- Item component
-    item:give("item", item_def.type, item_def.name, item_def.volume)
+    -- Item component (use overrides if provided)
+    local volume = volume_override or item_def.volume
+    item:give("item", item_def.type, item_def.name, volume)
 
     -- Lifetime
     if item_def.lifetime then
@@ -42,6 +43,12 @@ function ItemSpawners.spawn_item(world, item_id, x, y, sector_x, sector_y)
     local body = love.physics.newBody(world.physics_world, x, y, "kinematic")
     body:setLinearDamping(phys.linear_damping)
     body:setAngularDamping(phys.angular_damping)
+
+    -- Set mass (use override if provided, otherwise use definition)
+    local mass = mass_override or phys.mass
+    if mass then
+        body:setMass(mass)
+    end
 
     -- No shape or fixture for items anymore
     item:give("physics", body, nil, nil)
@@ -59,8 +66,8 @@ function ItemSpawners.spawn_item(world, item_id, x, y, sector_x, sector_y)
 end
 
 -- Convenience function for spawning stone
-function ItemSpawners.spawn_stone(world, x, y, sector_x, sector_y)
-    return ItemSpawners.spawn_item(world, "stone", x, y, sector_x, sector_y)
+function ItemSpawners.spawn_stone(world, x, y, sector_x, sector_y, volume, mass)
+    return ItemSpawners.spawn_item(world, "stone", x, y, sector_x, sector_y, volume, mass)
 end
 
 return ItemSpawners
