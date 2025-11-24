@@ -95,6 +95,19 @@ function PlayState:enter(prev, param)
     Chat.init()
     Chat.enable()
 
+    -- Init Client
+    local Client = require "src.network.client"
+    Client.connect()
+
+    Client.setReceiveCallback(function(msg)
+        Chat.addMessage(msg, "text")
+    end)
+
+    Chat.setSendHandler(function(msg)
+        Client.send(msg)
+        Chat.addMessage("You: " .. msg, "text")
+    end)
+
     -- Local controls
     self.world.controls = baton.new({
         controls = {
@@ -197,6 +210,10 @@ end
 function PlayState:update(dt)
     -- 1. Update Chat
     Chat.update(dt)
+
+    -- Update Client
+    local Client = require "src.network.client"
+    Client.update(dt)
 
     -- 2. Toggle Controls based on Chat state
     if Chat.isActive() then

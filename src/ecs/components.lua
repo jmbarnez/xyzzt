@@ -151,6 +151,7 @@ end)
 Concord.component("cargo", function(c, capacity)
     c.capacity = capacity or 100 -- Now represents volume
     c.current = 0
+    c.mass = 0                   -- Total mass of items in cargo
     c.items = {}                 -- table of {name="Stone", count=1}
 end)
 

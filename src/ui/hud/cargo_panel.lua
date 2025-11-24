@@ -62,7 +62,8 @@ function CargoPanel.draw(world, player)
 
     local used = cargo.current or 0
     local capacity = cargo.capacity or 0
-    local bottomText = string.format("Cargo %d / %d", math.floor(used), math.floor(capacity))
+    local mass = cargo.mass or 0
+    local bottomText = string.format("Vol: %d/%d | Mass: %.1f", math.floor(used), math.floor(capacity), mass)
 
     local wx, wy, ww, wh = CargoPanel.getWindowRect(world)
 
