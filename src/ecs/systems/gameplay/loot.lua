@@ -21,7 +21,23 @@ function LootSystem:entity_died(entity)
         end
     elseif entity.asteroid_chunk then
         -- Chunks drop resources
-        ItemSpawners.spawn_stone(world, t.x, t.y, s.x, s.y)
+        local cr = entity.chunk_resource
+        if not cr then
+            ItemSpawners.spawn_stone(world, t.x, t.y, s.x, s.y)
+            return
+        end
+
+        local resource_type = cr.resource_type or "stone"
+        local amount = cr.amount or 1
+
+        -- For now we only have stone items; treat any unknown type as stone
+        if resource_type ~= "stone" then
+            resource_type = "stone"
+        end
+
+        for i = 1, amount do
+            ItemSpawners.spawn_stone(world, t.x, t.y, s.x, s.y)
+        end
     elseif entity.vehicle then
         -- Ships could drop scrap or cargo here
         -- (Future implementation)

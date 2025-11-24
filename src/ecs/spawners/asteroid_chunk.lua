@@ -1,6 +1,12 @@
 local Concord = require "concord"
+local ChunkTypes = require "src.data.chunks"
 
 local AsteroidChunkSpawner = {}
+local MIN_CHUNK_RADIUS = 6
+local MIN_PARENT_RADIUS_FOR_CHUNKS = 20
+local BASE_UNIT_RADIUS = MIN_CHUNK_RADIUS
+local BASE_UNIT_AREA = math.pi * BASE_UNIT_RADIUS * BASE_UNIT_RADIUS
+AsteroidChunkSpawner.MIN_PARENT_RADIUS_FOR_CHUNKS = MIN_PARENT_RADIUS_FOR_CHUNKS
 
 -- Spawn asteroid chunks when an asteroid is destroyed
 -- @param world: ECS world
@@ -16,7 +22,18 @@ function AsteroidChunkSpawner.spawn(world, parent_entity, num_chunks)
     if not (transform and sector and render) then return end
 
     local parent_radius = render.radius or 10
+    if (not num_chunks) and parent_radius < MIN_PARENT_RADIUS_FOR_CHUNKS then
+        return
+    end
     local parent_color = render.color or { 0.6, 0.6, 0.6, 1 }
+
+    local composition_map
+    if parent_entity.asteroid_composition and parent_entity.asteroid_composition.map then
+        composition_map = parent_entity.asteroid_composition.map
+    end
+    if not composition_map or next(composition_map) == nil then
+        composition_map = { stone = 1.0 }
+    end
 
     -- Always spawn 2-3 chunks
     if not num_chunks then
@@ -42,10 +59,41 @@ function AsteroidChunkSpawner.spawn(world, parent_entity, num_chunks)
     end
     local rng = love.math.newRandomGenerator(seed)
 
+    local function choose_resource_type()
+        local total = 0
+        for _, weight in pairs(composition_map) do
+            if weight and weight > 0 then
+                total = total + weight
+            end
+        end
+
+        if total <= 0 then
+            return "stone"
+        end
+
+        local r = rng:random() * total
+        local acc = 0
+        for res, weight in pairs(composition_map) do
+            if weight and weight > 0 then
+                acc = acc + weight
+                if r <= acc then
+                    return res
+                end
+            end
+        end
+
+        return "stone"
+    end
+
     for i = 1, num_chunks do
+        local resource_type = choose_resource_type()
+
         -- Varied chunk sizes (40% to 120% of base)
         local size_variation = 0.4 + rng:random() * 0.8
         local chunk_radius = base_chunk_radius * size_variation
+        if chunk_radius < MIN_CHUNK_RADIUS then
+            chunk_radius = MIN_CHUNK_RADIUS
+        end
 
         -- Random angle for radial distribution with more jitter
         local base_angle = (math.pi * 2 / num_chunks) * i
@@ -77,14 +125,23 @@ function AsteroidChunkSpawner.spawn(world, parent_entity, num_chunks)
             table.insert(vertices, math.sin(v_angle) * v_radius)
         end
 
+        local chunk_def = ChunkTypes[resource_type] or ChunkTypes.stone
+        local chunk_color = chunk_def.color or parent_color
+
+        local area = math.pi * chunk_radius * chunk_radius
+        local area_ratio = area / BASE_UNIT_AREA
+        local yield_scale = chunk_def.yield_per_unit_area or 2.0
+        local units = math.max(1, math.floor(math.sqrt(area_ratio) * yield_scale + 0.5))
+
         chunk:give("render", {
             render_type = "asteroid_chunk",
-            color = parent_color,
+            color = chunk_color,
             radius = chunk_radius,
             vertices = vertices, -- Store vertices for rendering
             seed = seed          -- Pass parent seed for texture consistency
         })
         chunk:give("asteroid_chunk")
+        chunk:give("chunk_resource", resource_type, units)
 
         -- Give chunks HP so they can be destroyed
         local hp_max = math.floor(chunk_radius * 1.5)

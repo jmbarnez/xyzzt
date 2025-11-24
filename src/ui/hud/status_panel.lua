@@ -2,18 +2,26 @@ local Theme = require "src.ui.theme"
 
 local StatusPanel = {}
 
--- Helper to draw a compact horizontal bar for the status panel
-local function drawBar(x, y, width, height, current, max, colorFill, colorBg)
+-- Compact horizontal bar (with optional border)
+local function drawBar(x, y, width, height, current, max, colorFill, colorBg, showBorder)
     local pct = 0
     if max and max > 0 then
         pct = math.max(0, math.min(1, (current or 0) / max))
     end
 
     love.graphics.setColor(colorBg)
-    love.graphics.rectangle("fill", x, y, width, height, 0, 0)
+    love.graphics.rectangle("fill", x, y, width, height, 3, 3)
 
-    love.graphics.setColor(colorFill)
-    love.graphics.rectangle("fill", x, y, width * pct, height, 0, 0)
+    if pct > 0 then
+        love.graphics.setColor(colorFill)
+        love.graphics.rectangle("fill", x, y, width * pct, height, 3, 3)
+    end
+
+    if showBorder then
+        love.graphics.setColor(0, 0, 0, 0.85)
+        love.graphics.setLineWidth(1)
+        love.graphics.rectangle("line", x, y, width, height, 3, 3)
+    end
 end
 
 -- Draw the status panel in the top-left, with level on the left and bars on the right
@@ -29,26 +37,44 @@ function StatusPanel.draw(player)
     end
 
     -- Panel positioning (top-left)
-    local panelX = 20
-    local panelY = 20
-    local panelWidth = 260
-    local panelHeight = 56
+    local sw, _ = love.graphics.getDimensions()
+    local margin = 16
+    local panelWidth = 300
+    local panelHeight = 60
+    local panelX = margin
+    local panelY = margin
 
-    local levelRadius = 16
-    local levelCenterX = panelX + levelRadius + 4
-    local levelCenterY = panelY + panelHeight / 2
+    -- Drop shadow
+    love.graphics.setColor(0, 0, 0, 0.45)
+    love.graphics.rectangle("fill", panelX + 3, panelY + 4, panelWidth, panelHeight, 6, 6)
 
-    local barsX = levelCenterX + levelRadius + 16
-    local barsY = panelY + panelHeight / 2 - 4
-    local barWidth = panelWidth - (barsX - panelX) - 10
-    local barHeight = 8
+    -- Panel Background (single solid color)
+    local bg = Theme.getBackgroundColor()
+    love.graphics.setColor(bg[1], bg[2], bg[3], 0.96)
+    love.graphics.rectangle("fill", panelX, panelY, panelWidth, panelHeight, 6, 6)
 
+    -- Panel Outline
+    local _, outlineColor = Theme.getButtonColors("default")
+    love.graphics.setColor(outlineColor[1], outlineColor[2], outlineColor[3], 0.9)
+    love.graphics.setLineWidth(1)
+    love.graphics.rectangle("line", panelX, panelY, panelWidth, panelHeight, 6, 6)
+
+    -- Layout inside panel
+    local contentPadding = 10
+    local cx = panelX + contentPadding
+    local cy = panelY + contentPadding
+    local cw = panelWidth - contentPadding * 2
+    local ch = panelHeight - contentPadding * 2
+
+    -- Fonts
     local fontLevel = Theme.getFont("default")
     local fontLabel = Theme.getFont("chat")
 
-    -- No background panel: render level + bar directly over the scene
+    -- === LEFT: Level + XP Ring ===
+    local levelRadius = 18
+    local levelCenterX = cx + levelRadius + 4
+    local levelCenterY = panelY + panelHeight * 0.5
 
-    -- XP ring around level
     local levelComponent = (ship and ship.level) or player.level
     local xp = levelComponent and levelComponent.xp or 0
     local nextXp = levelComponent and levelComponent.next_level_xp or 1000
@@ -60,16 +86,20 @@ function StatusPanel.draw(player)
     local startAngle = -math.pi / 2
     local endAngle = startAngle + (2 * math.pi * xpRatio)
 
-    love.graphics.setLineWidth(3)
-    -- Background ring
-    love.graphics.setColor(0.15, 0.15, 0.15, 0.9)
+    -- XP Ring (background track)
+    love.graphics.setLineWidth(4)
+    love.graphics.setColor(0.04, 0.06, 0.14, 0.9)
+    love.graphics.circle("fill", levelCenterX, levelCenterY, levelRadius + 1)
+
+    love.graphics.setColor(0.12, 0.16, 0.28, 1.0)
     love.graphics.arc("line", levelCenterX, levelCenterY, levelRadius, 0, 2 * math.pi)
+
     -- XP arc
-    love.graphics.setColor(0.2, 0.7, 1.0, 1.0)
+    love.graphics.setColor(0.25, 0.95, 0.55, 1.0)
     love.graphics.arc("line", levelCenterX, levelCenterY, levelRadius, startAngle, endAngle)
     love.graphics.setLineWidth(1)
 
-    -- Level text in the center (smaller font)
+    -- Level text in the center
     love.graphics.setFont(fontLevel)
     love.graphics.setColor(Theme.colors.textPrimary)
     local levelValue = (levelComponent and levelComponent.current) or 1
@@ -78,44 +108,80 @@ function StatusPanel.draw(player)
     local textH = fontLevel:getHeight()
     love.graphics.print(levelText, levelCenterX - textW / 2, levelCenterY - textH / 2)
 
-    -- Sleek hybrid Shield/Hull bar
-    love.graphics.setFont(fontLabel)
-    
+    -- Divider line between level and bars
+    local dividerX = levelCenterX + levelRadius + 8
+    love.graphics.setColor(outlineColor[1], outlineColor[2], outlineColor[3], 0.5)
+    love.graphics.setLineWidth(1)
+    love.graphics.line(dividerX, cy, dividerX, cy + ch)
+
+    -- === RIGHT: Bars ===
+    local rightX = dividerX + 6
+    local rightWidth = panelX + panelWidth - contentPadding - rightX
+    local barWidth = rightWidth
+    local barHeight = 12
+    local barGap = 7
+
+    local topBarY = cy + 2
+    local bottomBarY = topBarY + barHeight + barGap
+
     local shieldCurrent = (ship and ship.shield and ship.shield.current) or 0
     local shieldMax = (ship and ship.shield and ship.shield.max) or 0
     local hullCurrent = (ship and ship.hull and ship.hull.current) or 0
     local hullMax = (ship and ship.hull and ship.hull.max) or 0
-    
-    local hullPct = 0
-    if hullMax > 0 then
-        hullPct = math.max(0, math.min(1, hullCurrent / hullMax))
+
+    -- SHIELD BAR (top)
+    local shieldFill = { 0.2, 0.95, 1.0, 0.95 }
+    local shieldBg = { 0.04, 0.08, 0.14, 0.9 }
+    drawBar(
+        rightX,
+        topBarY,
+        barWidth,
+        barHeight,
+        shieldCurrent,
+        shieldMax,
+        shieldFill,
+        shieldBg,
+        true
+    )
+
+    -- Slight neon inner line for shield if any
+    if shieldMax > 0 and shieldCurrent > 0 then
+        local pct = math.max(0, math.min(1, shieldCurrent / shieldMax))
+        love.graphics.setColor(0.5, 1.0, 1.0, 0.9)
+        love.graphics.setLineWidth(1)
+        local innerX = rightX + 2
+        local innerY = topBarY + barHeight - 3
+        local innerW = (barWidth - 4) * pct
+        love.graphics.line(innerX, innerY, innerX + innerW, innerY)
     end
 
-    local shieldPct = 0
-    if shieldMax > 0 then
-        shieldPct = math.max(0, math.min(1, shieldCurrent / shieldMax))
-    end
-    
-    if hullPct > 0 or shieldPct > 0 then
-        -- Subtle background
-        love.graphics.setColor(0.05, 0.05, 0.05, 0.9)
-        love.graphics.rectangle("fill", barsX, barsY, barWidth, barHeight, 0, 0)
+    -- HULL BAR (bottom)
+    local hullFill = { 0.95, 0.25, 0.25, 0.95 }
+    local hullBg = { 0.08, 0.05, 0.07, 0.9 }
+    drawBar(
+        rightX,
+        bottomBarY,
+        barWidth,
+        barHeight,
+        hullCurrent,
+        hullMax,
+        hullFill,
+        hullBg,
+        true
+    )
 
-        -- Hull portion (emerald green base)
-        if hullPct > 0 then
-            love.graphics.setColor(0.15, 0.85, 0.4, 1)
-            love.graphics.rectangle("fill", barsX, barsY, barWidth * hullPct, barHeight, 0, 0)
-        end
-
-        -- Shield bar sitting directly on top of the hull bar (same band)
-        if shieldPct > 0 then
-            local shieldInset = 1
-            local shieldHeight = math.max(2, barHeight - 2 * shieldInset)
-            local shieldY = barsY + shieldInset
-            love.graphics.setColor(0.2, 0.8, 1.0, 0.9)
-            love.graphics.rectangle("fill", barsX + shieldInset, shieldY, (barWidth - 2 * shieldInset) * shieldPct, shieldHeight, 0, 0)
-        end
+    -- Divider ticks on bars
+    local numDivisions = 8
+    love.graphics.setColor(0, 0, 0, 0.6)
+    love.graphics.setLineWidth(1)
+    for i = 1, numDivisions - 1 do
+        local t = i / numDivisions
+        local tickX = rightX + barWidth * t
+        love.graphics.line(tickX, topBarY + 2, tickX, topBarY + barHeight - 2)
+        love.graphics.line(tickX, bottomBarY + 2, tickX, bottomBarY + barHeight - 2)
     end
+
+    love.graphics.setLineWidth(1)
 end
 
 return StatusPanel

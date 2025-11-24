@@ -122,7 +122,16 @@ end)
 
 Concord.component("asteroid")
 
+Concord.component("asteroid_composition", function(c, composition)
+    c.map = composition or {}
+end)
+
 Concord.component("asteroid_chunk")
+
+Concord.component("chunk_resource", function(c, resource_type, amount)
+    c.resource_type = resource_type or "stone"
+    c.amount = amount or 1
+end)
 
 Concord.component("projectile_shard")
 
@@ -164,8 +173,7 @@ Concord.component("trail", function(c, config_list)
                 width = cfg.width or 10,
                 length = cfg.length or 0.5,
                 color = cfg.color or { 0, 1, 1, 1 },
-                points = {},
-                mesh = nil
+                particle_system = nil -- Love2D ParticleSystem
             })
         end
     end

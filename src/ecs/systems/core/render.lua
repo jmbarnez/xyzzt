@@ -81,12 +81,10 @@ function RenderSystem:draw()
             if math.abs(diff_x) <= 1 and math.abs(diff_y) <= 1 then
                 -- Draw Trails (World Space)
                 if e.trail and e.trail.trails then
-                    if not trailShader then
-                        local shader_path = "assets/shaders/engine_trail.glsl"
-                        if love.filesystem.getInfo(shader_path) then
-                            trailShader = love.graphics.newShader(shader_path)
-                        end
-                    end
+                    -- We don't need the shader for particles (they use their own texture/colors)
+                    -- But we do need to handle the coordinate system.
+                    -- The particle systems are updated in World Space (emitters moved to world pos).
+                    -- So we should draw them at (0,0) relative to the sector offset.
 
                     local sector_offset_x = diff_x * Config.SECTOR_SIZE
                     local sector_offset_y = diff_y * Config.SECTOR_SIZE
@@ -94,21 +92,16 @@ function RenderSystem:draw()
                     love.graphics.push()
                     love.graphics.translate(sector_offset_x, sector_offset_y)
 
-                    if trailShader then
-                        love.graphics.setShader(trailShader)
-                        trailShader:send("time", love.timer.getTime())
-                    end
-
-                    love.graphics.setColor(1, 1, 1, 1)
+                    -- Additive blending for glowing effect
+                    love.graphics.setBlendMode("add")
 
                     for _, trail in ipairs(e.trail.trails) do
-                        if trail.mesh then
-                            love.graphics.draw(trail.mesh)
+                        if trail.particle_system then
+                            love.graphics.draw(trail.particle_system, 0, 0)
                         end
                     end
 
-                    love.graphics.setShader()
-
+                    love.graphics.setBlendMode("alpha")
                     love.graphics.pop()
                 end
 

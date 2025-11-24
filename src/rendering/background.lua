@@ -90,6 +90,23 @@ function Background.new(enableNebula)
     self.nebulaParams.densityScale = Config.BACKGROUND.NEBULA.DENSITY_BASE +
     math.random() * Config.BACKGROUND.NEBULA.DENSITY_RANGE
 
+    self.nebulaParams.patches = {}
+    local patchCount = 3
+    for i = 1, patchCount do
+        local angle = math.random() * math.pi * 2
+        local radius = 0.15 + math.random() * 0.45
+        local cx = math.cos(angle) * radius
+        local cy = math.sin(angle) * radius
+        local coverage = 0.25 + math.random() * 0.65
+        local colorVariation = 0.3 + math.random() * 0.7
+
+        self.nebulaParams.patches[i] = {
+            centerOffset = { cx, cy },
+            coverage = coverage,
+            colorVariation = colorVariation
+        }
+    end
+
     self:generateStars()
 
     return self
@@ -237,7 +254,26 @@ function Background:draw(cam_x, cam_y, cam_sector_x, cam_sector_y)
         self.nebulaShader:send("distortion", self.nebulaParams.distortion or 0.2)
         self.nebulaShader:send("densityScale", self.nebulaParams.densityScale or 1.0)
 
-        love.graphics.rectangle("fill", 0, 0, sw, sh)
+        local patches = self.nebulaParams.patches or {
+            {
+                centerOffset = { 0, 0 },
+                coverage = 0.6,
+                colorVariation = 0.8
+            }
+        }
+
+        for _, patch in ipairs(patches) do
+            local centerOffset = patch.centerOffset or { 0, 0 }
+            local coverage = patch.coverage or 0.6
+            local colorVariation = patch.colorVariation or 0.8
+
+            self.nebulaShader:send("centerOffset", centerOffset)
+            self.nebulaShader:send("coverage", coverage)
+            self.nebulaShader:send("colorVariation", colorVariation)
+
+            love.graphics.rectangle("fill", 0, 0, sw, sh)
+        end
+
         love.graphics.setShader()
     end
 

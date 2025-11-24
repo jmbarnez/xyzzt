@@ -140,7 +140,10 @@ function Asteroids.spawnField(world, sector_x, sector_y, seed, count)
             end
         end
 
-        spawn_single(world, sector_x or 0, sector_y or 0, x, y, radius, color)
+        local asteroid = spawn_single(world, sector_x or 0, sector_y or 0, x, y, radius, color)
+        if asteroid and not asteroid.asteroid_composition then
+            asteroid:give("asteroid_composition", { stone = 1.0 })
+        end
     end
 end
 

@@ -10,11 +10,11 @@ local MinimapSystem = Concord.system({
 })
 
 -- Minimap Configuration
-local MAP_SIZE      = 100 -- Size of the minimap in pixels (square)
+local MAP_SIZE      = 130 -- Size of the minimap in pixels (square)
 local MAP_MARGIN    = 20  -- Margin from the top-right corner
 local ZOOM_LEVEL    = 0.1 -- Scale factor (how much world area is shown)
-local BORDER_COLOR  = { 1, 1, 1, 1 }
-local BG_COLOR      = { 0, 0, 0, 0.8 }
+local BORDER_COLOR  = { 1, 1, 1, 0.65 }
+local BG_COLOR      = { 0.01, 0.015, 0.035, 1.0 }
 
 function MinimapSystem:draw()
     local screen_w, screen_h = love.graphics.getDimensions()
@@ -50,25 +50,24 @@ function MinimapSystem:draw()
     love.graphics.push()
     love.graphics.origin() -- Reset any previous transformations
 
-    local radius = MAP_SIZE / 2
-    local center_x = map_x + radius
-    local center_y = map_y + radius
-
-    -- Draw Background
+    -- Draw Background (square with slight rounding)
     love.graphics.setColor(BG_COLOR)
-    love.graphics.circle("fill", center_x, center_y, radius)
+    love.graphics.rectangle("fill", map_x, map_y, MAP_SIZE, MAP_SIZE, 2, 2)
 
     -- Draw Border
     love.graphics.setColor(BORDER_COLOR)
-    love.graphics.setLineWidth(2)
-    love.graphics.circle("line", center_x, center_y, radius)
+    love.graphics.setLineWidth(1.5)
+    love.graphics.rectangle("line", map_x, map_y, MAP_SIZE, MAP_SIZE, 2, 2)
 
     -- 4. Draw Entities (Clipped to Minimap)
-    -- Use a stencil circle to clip drawing to the minimap area
+    -- Use a stencil rectangle to clip drawing to the minimap area
     love.graphics.stencil(function()
-        love.graphics.circle("fill", center_x, center_y, radius)
+        love.graphics.rectangle("fill", map_x, map_y, MAP_SIZE, MAP_SIZE)
     end, "replace", 1)
     love.graphics.setStencilTest("greater", 0)
+
+    local center_x = map_x + MAP_SIZE / 2
+    local center_y = map_y + MAP_SIZE / 2
 
     for _, e in ipairs(self.drawPool) do
         -- Skip projectiles entirely on the minimap

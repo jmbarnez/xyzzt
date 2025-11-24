@@ -6,29 +6,60 @@ local TrailSystem = Concord.system({
 })
 
 function TrailSystem:init()
-    self.shader = love.graphics.newShader("assets/shaders/engine_trail.glsl")
+    -- Create a shared texture for the particles (a soft glow)
+    local size = 32
+    local canvas = love.graphics.newCanvas(size, size)
+    love.graphics.setCanvas(canvas)
+    love.graphics.clear(0, 0, 0, 0)
+    love.graphics.setColor(1, 1, 1, 1)
+
+    -- Draw a soft circle
+    local radius = size / 2
+    for r = radius, 0, -1 do
+        local alpha = math.pow(1.0 - (r / radius), 2) -- Quadratic falloff
+        love.graphics.setColor(1, 1, 1, alpha)
+        love.graphics.circle("fill", radius, radius, r)
+    end
+
+    love.graphics.setCanvas()
+    self.particle_texture = love.graphics.newImage(canvas:newImageData())
 end
 
 function TrailSystem:update(dt)
-    local time = love.timer.getTime()
-
-    if self.shader then
-        self.shader:send("time", time)
-    end
-
     for _, e in ipairs(self.pool) do
         local trail_comp = e.trail
         local transform = e.transform
         local vehicle = e.vehicle
 
-        -- Only add points if moving (or maybe always to show idle engine?)
-        -- For now, let's add points if thrusting or moving fast enough
-        local is_moving = (e.input and e.input.thrust) or (vehicle and vehicle.speed and vehicle.speed > 10)
+        -- Emit if any movement key is pressed or if moving fast enough
+        local is_moving = (e.input and (e.input.thrust or e.input.move_x ~= 0 or e.input.move_y ~= 0)) or
+        (vehicle and vehicle.speed and vehicle.speed > 10)
 
         if trail_comp.trails then
             for _, trail in ipairs(trail_comp.trails) do
+                -- Initialize ParticleSystem if needed
+                if not trail.particle_system then
+                    local ps = love.graphics.newParticleSystem(self.particle_texture, 500)
+                    ps:setParticleLifetime(trail.length * 0.5, trail.length) -- Lifetime based on trail length
+                    ps:setEmissionRate(60)                                   -- Particles per second
+                    ps:setSizeVariation(0.5)
+                    ps:setLinearAcceleration(0, 0, 0, 0)                     -- No gravity
+                    ps:setColors(
+                        trail.color[1], trail.color[2], trail.color[3], 1,   -- Start color
+                        trail.color[1], trail.color[2], trail.color[3], 0    -- End color (fade out)
+                    )
+
+                    -- Size over life: Start at width, shrink to 0
+                    -- Particle size is a multiplier of the texture size (32)
+                    local start_size = trail.width / 32
+                    ps:setSizes(start_size, start_size * 0.5, 0)
+
+                    trail.particle_system = ps
+                end
+
+                local ps = trail.particle_system
+
                 -- Calculate world position of this engine mount
-                -- Transform local offset (trail.offset_x, trail.offset_y) by ship transform
                 local angle = transform.r
                 local cos_a = math.cos(angle)
                 local sin_a = math.sin(angle)
@@ -36,87 +67,29 @@ function TrailSystem:update(dt)
                 local world_x = transform.x + (trail.offset_x * cos_a - trail.offset_y * sin_a)
                 local world_y = transform.y + (trail.offset_x * sin_a + trail.offset_y * cos_a)
 
-                -- Add new point
-                table.insert(trail.points, 1, {
-                    x = world_x,
-                    y = world_y,
-                    time = time,
-                    angle = angle
-                })
+                -- Update Particle System
+                ps:update(dt)
 
-                -- Remove old points
-                for i = #trail.points, 1, -1 do
-                    local p = trail.points[i]
-                    if time - p.time > trail.length then
-                        table.remove(trail.points, i)
+                -- Move emitter to current position
+                -- Note: We don't use setPosition because that moves the whole system coordinate space if we draw at (0,0).
+                -- Wait, if we draw at (0,0) world space, and setPosition(world_x, world_y), then particles spawn at world_x, world_y.
+                -- Existing particles stay relative to the system origin?
+                -- Actually, standard behavior:
+                -- If we draw(ps, 0, 0), and ps:setPosition(x, y), particles spawn at (x,y).
+                -- If we move the emitter, old particles stay where they were spawned relative to the system origin (0,0).
+                -- So this is exactly what we want for world-space trails.
+
+                ps:setPosition(world_x, world_y)
+
+                -- Emit particles if moving
+                if is_moving then
+                    ps:emit(1) -- Emit based on rate is handled automatically if we use start(), but manual emit gives more control?
+                    -- Actually, let's use start/stop
+                    if not ps:isActive() then
+                        ps:start()
                     end
-                end
-
-                -- Update Mesh
-                if #trail.points >= 2 then
-                    local vertices = {}
-
-                    for i, p in ipairs(trail.points) do
-                        local age = time - p.time
-                        local life_pct = age / trail.length
-
-                        -- Texture coordinates: u = life_pct (0 at head, 1 at tail)
-                        local u = life_pct
-
-                        -- Width tapers slightly at the end?
-                        local w = trail.width * (1.0 - life_pct * 0.5)
-
-                        -- Perpendicular vector for width
-                        local perp_x, perp_y
-
-                        if i < #trail.points then
-                            local next_p = trail.points[i + 1]
-                            local dx = next_p.x - p.x
-                            local dy = next_p.y - p.y
-                            local len = math.sqrt(dx * dx + dy * dy)
-                            if len > 0 then
-                                perp_x = -dy / len
-                                perp_y = dx / len
-                            else
-                                perp_x = -math.sin(p.angle)
-                                perp_y = math.cos(p.angle)
-                            end
-                        else
-                            perp_x = -math.sin(p.angle)
-                            perp_y = math.cos(p.angle)
-                        end
-
-                        -- Left vertex
-                        table.insert(vertices, {
-                            p.x + perp_x * w * 0.5,
-                            p.y + perp_y * w * 0.5,
-                            u, 0,      -- u, v
-                            1, 1, 1, 1 -- r, g, b, a
-                        })
-
-                        -- Right vertex
-                        table.insert(vertices, {
-                            p.x - perp_x * w * 0.5,
-                            p.y - perp_y * w * 0.5,
-                            u, 1, -- u, v
-                            1, 1, 1, 1
-                        })
-                    end
-
-                    -- Create or update mesh
-                    if not trail.mesh then
-                        trail.mesh = love.graphics.newMesh(vertices, "strip", "dynamic")
-                        trail.mesh:setTexture(love.graphics.newCanvas(1, 1)) -- Dummy texture
-                    else
-                        -- Check if we need to resize (recreate) the mesh
-                        if #vertices > trail.mesh:getVertexCount() then
-                            trail.mesh = love.graphics.newMesh(vertices, "strip", "dynamic")
-                            trail.mesh:setTexture(love.graphics.newCanvas(1, 1))
-                        else
-                            trail.mesh:setVertices(vertices)
-                            trail.mesh:setDrawRange(1, #vertices)
-                        end
-                    end
+                else
+                    ps:stop()
                 end
             end
         end
@@ -124,13 +97,7 @@ function TrailSystem:update(dt)
 end
 
 function TrailSystem:draw()
-    -- Drawing is handled in RenderSystem via RenderStrategies usually,
-    -- but since this is a visual system, maybe it can draw itself?
-    -- The RenderSystem architecture seems to handle all drawing.
-    -- We should probably expose the mesh to the RenderSystem.
-    -- However, RenderStrategies.ship is where we want to attach this.
-    -- Or we can have a separate RenderStrategies.trail?
-    -- Let's stick to updating the mesh here, and drawing in RenderStrategies.
+    -- Drawing is handled in RenderSystem
 end
 
 return TrailSystem
