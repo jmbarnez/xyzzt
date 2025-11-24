@@ -2,7 +2,7 @@ local SaveManager = {}
 
 SaveManager.schema_version = 1
 
-local bitser = require "bitser"
+local bitser = require "lib.bitser"
 local Config = require "src.config"
 
 local function get_slot_filename(slot)

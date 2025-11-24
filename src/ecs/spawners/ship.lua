@@ -1,4 +1,4 @@
-local Concord = require "concord"
+local Concord = require "lib.concord.concord"
 local Ships = require "src.data.ships"
 local Config = require "src.config"
 

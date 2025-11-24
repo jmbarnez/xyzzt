@@ -1,4 +1,4 @@
-local Concord = require "concord"
+local Concord = require "lib.concord.concord"
 local ChunkTypes = require "src.data.chunks"
 local ItemSpawners = require "src.ecs.spawners.item"
 

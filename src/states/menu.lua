@@ -1,6 +1,6 @@
 ---@diagnostic disable: undefined-global
 
-local Gamestate    = require "hump.gamestate"
+local Gamestate    = require "lib.hump.gamestate"
 local Utils        = require "src.utils.utils"
 local Theme        = require "src.ui.theme"
 local Config       = require "src.config"
@@ -38,6 +38,15 @@ function MenuState:enter()
             end,
         },
         {
+            label = "JOIN GAME",
+            action = function()
+                self.ip_input_mode = true
+                self.ip_input = "localhost"
+                self.cursor_blink_time = 0
+                self.cursor_visible = true
+            end,
+        },
+        {
             label = "LOAD GAME",
             action = function()
                 if SaveManager.has_save(1) then
@@ -51,6 +60,12 @@ function MenuState:enter()
     self.hoveredButton = nil
     self.activeButton = nil
     self.mouseWasDown = false
+
+    -- IP Input state
+    self.ip_input_mode = false
+    self.ip_input = "localhost"
+    self.cursor_blink_time = 0
+    self.cursor_visible = true
 end
 
 function MenuState:update(dt)
@@ -63,35 +78,52 @@ function MenuState:update(dt)
         self.titleShader:send("time", self.shaderTime)
     end
 
+    -- Update cursor blink for IP input
+    if self.ip_input_mode then
+        self.cursor_blink_time = self.cursor_blink_time + dt
+        if self.cursor_blink_time >= 0.5 then
+            self.cursor_visible = not self.cursor_visible
+            self.cursor_blink_time = 0
+        end
+    end
+
     self:updateButtonLayout()
 
     local mouseX, mouseY = love.mouse.getPosition()
 
-    self.hoveredButton = nil
-    for index, rect in ipairs(self.buttonRects) do
-        if pointInRect(mouseX, mouseY, rect) then
-            self.hoveredButton = index
-            break
+    -- Don't process button hovers/clicks when IP input dialog is open
+    if not self.ip_input_mode then
+        self.hoveredButton = nil
+        for index, rect in ipairs(self.buttonRects) do
+            if pointInRect(mouseX, mouseY, rect) then
+                self.hoveredButton = index
+                break
+            end
         end
+    else
+        self.hoveredButton = nil
     end
 
     local isDown = love.mouse.isDown(1)
 
-    if isDown and not self.mouseWasDown then
-        self.activeButton = self.hoveredButton
-    elseif not isDown and self.mouseWasDown then
-        if self.activeButton ~= nil and self.hoveredButton == self.activeButton then
-            local button = self.buttons[self.activeButton]
-            if button and button.action then
-                button.action()
+    -- Only process button clicks when dialog is NOT open
+    if not self.ip_input_mode then
+        if isDown and not self.mouseWasDown then
+            self.activeButton = self.hoveredButton
+        elseif not isDown and self.mouseWasDown then
+            if self.activeButton ~= nil and self.hoveredButton == self.activeButton then
+                local button = self.buttons[self.activeButton]
+                if button and button.action then
+                    button.action()
+                end
             end
+
+            self.activeButton = nil
         end
 
-        self.activeButton = nil
-    end
-
-    if not isDown then
-        self.activeButton = nil
+        if not isDown then
+            self.activeButton = nil
+        end
     end
 
     self.mouseWasDown = isDown
@@ -189,11 +221,70 @@ function MenuState:draw()
         end
     end
 
+    -- Draw IP input dialog if active
+    if self.ip_input_mode then
+        -- Draw overlay
+        love.graphics.setColor(0, 0, 0, 0.7)
+        love.graphics.rectangle("fill", 0, 0, sw, sh)
+
+        -- Draw input box
+        local boxWidth = 400
+        local boxHeight = 150
+        local boxX = (sw - boxWidth) / 2
+        local boxY = (sh - boxHeight) / 2
+
+        love.graphics.setColor(0.1, 0.1, 0.15, 0.95)
+        love.graphics.rectangle("fill", boxX, boxY, boxWidth, boxHeight, 8, 8)
+        love.graphics.setColor(0.4, 0.6, 1, 1)
+        love.graphics.rectangle("line", boxX, boxY, boxWidth, boxHeight, 8, 8)
+
+        -- Draw title
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.setFont(self.fontButton)
+        love.graphics.printf("Enter Server IP", boxX, boxY + 20, boxWidth, "center")
+
+        -- Draw input field
+        local inputY = boxY + 60
+        love.graphics.setColor(0.05, 0.05, 0.1, 1)
+        love.graphics.rectangle("fill", boxX + 20, inputY, boxWidth - 40, 40, 4, 4)
+        love.graphics.setColor(0.6, 0.8, 1, 1)
+        love.graphics.rectangle("line", boxX + 20, inputY, boxWidth - 40, 40, 4, 4)
+
+        -- Draw input text
+        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.printf(self.ip_input, boxX + 30, inputY + 12, boxWidth - 60, "left")
+
+        -- Draw blinking cursor
+        if self.cursor_visible then
+            local textWidth = self.fontButton:getWidth(self.ip_input)
+            love.graphics.setColor(0.6, 0.8, 1, 1)
+            love.graphics.rectangle("fill", boxX + 30 + textWidth + 2, inputY + 10, 2, 20)
+        end
+
+        -- Draw instructions
+        love.graphics.setColor(0.7, 0.7, 0.7, 1)
+        local smallFont = love.graphics.newFont(14)
+        love.graphics.setFont(smallFont)
+        love.graphics.printf("Press ENTER to connect | ESC to cancel", boxX, inputY + 50, boxWidth, "center")
+    end
+
     love.graphics.setLineWidth(1)
     love.graphics.setColor(1, 1, 1, 1)
 end
 
 function MenuState:keypressed(key)
+    if self.ip_input_mode then
+        if key == "return" or key == "kpenter" then
+            Gamestate.switch(require("src.states.play"), { mode = "join", host = self.ip_input })
+        elseif key == "escape" then
+            self.ip_input_mode = false
+            self.ip_input = "localhost"
+        elseif key == "backspace" then
+            self.ip_input = string.sub(self.ip_input, 1, -2)
+        end
+        return
+    end
+
     if key == 'escape' then
         love.event.quit()
         return
@@ -201,6 +292,9 @@ function MenuState:keypressed(key)
 end
 
 function MenuState:textinput(t)
+    if self.ip_input_mode then
+        self.ip_input = self.ip_input .. t
+    end
 end
 
 return MenuState

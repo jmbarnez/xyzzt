@@ -1,4 +1,4 @@
-local Concord = require "concord"
+local Concord = require "lib.concord.concord"
 local WeaponRegistry = require "src.managers.weapon_registry"
 local MathUtils = require "src.utils.math_utils"
 

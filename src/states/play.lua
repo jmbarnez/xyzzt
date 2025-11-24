@@ -1,7 +1,7 @@
-local Gamestate   = require "hump.gamestate"
-local baton       = require "baton"
-local Camera      = require "hump.camera"
-local Concord     = require "concord"
+local Gamestate   = require "lib.hump.gamestate"
+local baton       = require "lib.baton"
+local Camera      = require "lib.hump.camera"
+local Concord     = require "lib.concord.concord"
 local Config      = require "src.config"
 local Background  = require "src.rendering.background"
 local HUD         = require "src.ui.hud.hud"
@@ -59,6 +59,10 @@ function PlayState:enter(prev, param)
         loadParams = param
     end
 
+    -- Check if we're joining
+    local is_joining = loadParams and loadParams.mode == "join"
+    local join_host = loadParams and loadParams.host or "localhost"
+
     local snapshot
     if loadParams and loadParams.mode == "load" then
         local slot = loadParams.slot or 1
@@ -96,17 +100,164 @@ function PlayState:enter(prev, param)
     Chat.init()
     Chat.enable()
 
-    -- Init Client
+    -- Init ENet Client
     local Client = require "src.network.client"
-    Client.connect()
 
-    Client.setReceiveCallback(function(msg)
-        Chat.addMessage(msg, "text")
+    -- Server hosting is disabled by default (press F5 to host)
+    self.world.hosting = false
+
+    -- Setup Chat Networking
+    Chat.setSendHandler(function(message)
+        -- If singleplayer/not connected, just show locally
+        if not Client.connected then
+            Chat.addMessage("You: " .. message, "text")
+            return
+        end
+
+        -- Send to server
+        Client.sendChatMessage(message)
     end)
 
-    Chat.setSendHandler(function(msg)
-        Client.send(msg)
-        Chat.addMessage("You: " .. msg, "text")
+    Client.setChatCallback(function(player_id, message)
+        -- Determine sender name
+        local sender = "Player " .. player_id
+        if Client.player_id and player_id == Client.player_id then
+            sender = "You"
+        end
+
+        Chat.addMessage(sender .. ": " .. message, "text")
+    end)
+
+    -- Set server address
+    if is_joining then
+        Client.server_address = join_host
+        -- Auto-connect when joining
+        Client.connect()
+    else
+        Client.server_address = "localhost"
+        -- Don't auto-connect, wait for F5 hosting or manual join
+    end
+
+    -- Track networked entities by network_id
+    self.world.networked_entities = {} -- Map of network_id -> entity
+
+    -- Set up network callbacks
+    Client.setWorldStateCallback(function(packet)
+        -- Hosts don't process world state updates - they ARE the authoritative world!
+        if self.world.hosting then
+            return
+        end
+
+        -- Apply world state to entities (CLIENTS ONLY)
+        for _, state in ipairs(packet.entities) do
+            local entity = self.world.networked_entities[state.id]
+
+            if entity then
+                -- Check if this is our own controlled ship
+                local is_my_ship = (self.my_entity_id and state.id == self.my_entity_id)
+
+                -- Update existing entity
+                -- For OUR ship: only update HP, not position (client-side prediction)
+                -- For REMOTE ships: update everything
+                if not is_my_ship then
+                    if entity.transform then
+                        entity.transform.x = state.x
+                        entity.transform.y = state.y
+                        entity.transform.r = state.r
+                    end
+                    if entity.sector then
+                        entity.sector.x = state.sx
+                        entity.sector.y = state.sy
+                    end
+                    if entity.physics and entity.physics.body then
+                        -- Update rotation on physics body
+                        entity.physics.body:setAngle(state.r)
+                        -- Update velocity
+                        if state.vx and state.vy then
+                            entity.physics.body:setLinearVelocity(state.vx, state.vy)
+                        end
+                    end
+                end
+
+                -- Always update HP (even for local player)
+                if entity.hp and state.hp_current then
+                    entity.hp.current = state.hp_current
+                end
+            else
+                -- Spawn new remote entity if it doesn't exist
+                if state.type == "vehicle" then
+                    -- Spawn remote player ship
+                    local is_me = (self.my_entity_id and state.id == self.my_entity_id)
+                    local ship = ShipSystem.spawn(self.world, "starter_drone", state.x, state.y, is_me)
+
+                    if ship then
+                        -- Store network ID
+                        ship.network_id = state.id
+
+                        -- Set initial state
+                        if ship.transform then
+                            ship.transform.r = state.r
+                        end
+                        if ship.sector then
+                            ship.sector.x = state.sx
+                            ship.sector.y = state.sy
+                        end
+                        if ship.physics and ship.physics.body then
+                            -- Set rotation on physics body
+                            ship.physics.body:setAngle(state.r)
+                            -- Set velocity
+                            if state.vx and state.vy then
+                                ship.physics.body:setLinearVelocity(state.vx, state.vy)
+                            end
+                        end
+                        if ship.hp and state.hp_current then
+                            ship.hp.current = state.hp_current
+                        end
+
+                        -- Track this entity
+                        self.world.networked_entities[state.id] = ship
+
+                        print("Spawned remote player ship with network_id=" .. state.id)
+
+                        -- If this is MY ship (from WELCOME packet), link controls!
+                        if is_me then
+                            print("Linking controls to my authoritative ship!")
+                            linkPlayerToShip(self.player, ship)
+                            self.world.local_ship = ship
+                            -- Ensure it's marked as host/local for rendering (green)
+                            if ship.render then
+                                ship.render.color = { 0.2, 1, 0.2 }
+                            end
+                        end
+                    end
+                end
+                -- TODO: Handle other entity types (asteroids, projectiles, etc.) when needed
+            end
+        end
+    end)
+
+    Client.setPlayerJoinedCallback(function(player_id, entity_id)
+        print("Player joined: player_id=" .. player_id .. ", entity_id=" .. tostring(entity_id))
+
+        -- If this is our own join confirmation, track our local ship
+        if entity_id and self.world.local_ship then
+            self.world.local_ship.network_id = entity_id
+            self.world.networked_entities[entity_id] = self.world.local_ship
+            print("Registered local ship with network_id=" .. entity_id)
+        end
+    end)
+
+    Client.setPlayerLeftCallback(function(player_id)
+        print("Player left: " .. player_id)
+        -- Note: We'll need to enhance this to remove the entity from networked_entities
+        -- when we have a way to map player_id to entity_id
+    end)
+
+    -- Handle WELCOME packet (Authoritative Spawning)
+    self.my_entity_id = nil
+    Client.setWelcomeCallback(function(player_id, entity_id)
+        print("Received WELCOME: You are player " .. player_id .. ", entity " .. tostring(entity_id))
+        self.my_entity_id = entity_id
     end)
 
     -- Local controls
@@ -166,22 +317,32 @@ function PlayState:enter(prev, param)
         end
     end
 
-    local ship = ShipSystem.spawn(self.world, ship_name, spawn_x, spawn_y, true)
+    local ship
+    if not is_joining then
+        ship = ShipSystem.spawn(self.world, ship_name, spawn_x, spawn_y, true)
 
-    if sector_x and ship.sector then
-        ship.sector.x = sector_x
-        ship.sector.y = sector_y
+        if sector_x and ship.sector then
+            ship.sector.x = sector_x
+            ship.sector.y = sector_y
+        end
+
+        linkPlayerToShip(self.player, ship)
+
+        -- Track local player's ship for network updates
+        -- The server will assign a network_id when the player joins
+        self.world.local_ship = ship
+    else
+        print("PlayState: Joining game, waiting for server spawn...")
+        -- Do NOT spawn a ship locally. Wait for WELCOME packet and World State.
     end
-
-    linkPlayerToShip(self.player, ship)
 
     if snapshot then
         SaveManager.apply_snapshot(self.world, self.player, ship, snapshot)
     end
 
     -- Spawn sector contents based on default_sector configuration
-    local player_sector_x = ship.sector and ship.sector.x or 0
-    local player_sector_y = ship.sector and ship.sector.y or 0
+    local player_sector_x = (ship and ship.sector and ship.sector.x) or 0
+    local player_sector_y = (ship and ship.sector and ship.sector.y) or 0
     local universe_seed = Config.UNIVERSE_SEED or 12345
 
     -- Spawn asteroids in starting sector
@@ -212,11 +373,17 @@ function PlayState:update(dt)
     -- 1. Update Chat
     Chat.update(dt)
 
-    -- Update Client
+    -- Update server if hosting (in-process, non-blocking)
+    if self.world.hosting then
+        local Server = require "src.network.server"
+        Server.update(dt)
+    end
+
+    -- Update ENet Client
     local Client = require "src.network.client"
     Client.update(dt)
 
-    -- 2. Toggle Controls based on Chat state
+    -- 2. Controls are disabled when chat is active
     if Chat.isActive() then
         self.world.controlsEnabled = false
     else
@@ -228,6 +395,13 @@ function PlayState:update(dt)
     end
 
     self.world:emit("update", dt)
+
+    -- Send inputs to server (CLIENTS ONLY - hosts apply inputs locally)
+    local Client = require "src.network.client"
+    if not self.world.hosting and Client.connected and self.world.local_ship and self.world.local_ship.input then
+        local input = self.world.local_ship.input
+        Client.sendInput(input.move_x or 0, input.move_y or 0, input.fire or false, input.target_angle or 0)
+    end
 
     if self.world and self.world.camera and self.world.ui then
         local mx, my = love.mouse.getPosition()
@@ -247,15 +421,19 @@ function PlayState:update(dt)
             if t and s and r and r.radius and (e.asteroid or e.asteroid_chunk or e.vehicle) then
                 local diff_x = (s.x or 0) - ship_sector_x
                 local diff_y = (s.y or 0) - ship_sector_y
-                local ex = t.x + diff_x * Config.SECTOR_SIZE
-                local ey = t.y + diff_y * Config.SECTOR_SIZE
-                local dx = wx - ex
-                local dy = wy - ey
-                local dist2 = dx * dx + dy * dy
-                local pickRadius = r.radius * 1.2
-                if dist2 <= pickRadius * pickRadius and (not bestDist2 or dist2 < bestDist2) then
-                    best = e
-                    bestDist2 = dist2
+
+                -- Optimization: Only check entities in neighbor sectors
+                if math.abs(diff_x) <= 1 and math.abs(diff_y) <= 1 then
+                    local ex = t.x + diff_x * Config.SECTOR_SIZE
+                    local ey = t.y + diff_y * Config.SECTOR_SIZE
+                    local dx = wx - ex
+                    local dy = wy - ey
+                    local dist2 = dx * dx + dy * dy
+                    local pickRadius = r.radius * 1.2
+                    if dist2 <= pickRadius * pickRadius and (not bestDist2 or dist2 < bestDist2) then
+                        best = e
+                        bestDist2 = dist2
+                    end
                 end
             end
         end
@@ -263,25 +441,7 @@ function PlayState:update(dt)
     end
 
     -- Update cargo window drag (if any)
-    local ui = self.world and self.world.ui
-    if ui and ui.cargo_drag and ui.cargo_drag.active and ui.cargo_open then
-        local mx, my = love.mouse.getPosition()
-        local wx, wy, ww, wh = CargoPanel.getWindowRect(self.world)
-
-        local drag = ui.cargo_drag
-        local new_x = mx - drag.offset_x
-        local new_y = my - drag.offset_y
-
-        local sw, sh = love.graphics.getDimensions()
-        new_x = math.max(0, math.min(new_x, sw - ww))
-        new_y = math.max(0, math.min(new_y, sh - wh))
-
-        ui.cargo_window = ui.cargo_window or {}
-        ui.cargo_window.x = new_x
-        ui.cargo_window.y = new_y
-        ui.cargo_window.width = ww
-        ui.cargo_window.height = wh
-    end
+    CargoPanel.update(dt, self.world)
 end
 
 function PlayState:draw()
@@ -301,6 +461,25 @@ function PlayState:keypressed(key)
         return -- Chat consumed the input
     end
 
+    -- F5: Start hosting (like Minecraft's "Open to LAN")
+    if key == "f5" and not self.world.hosting then
+        local Server = require "src.network.server"
+        -- Pass the host's existing world to the server!
+        if Server.start(25565, self.world) then
+            self.world.hosting = true
+            print("Hosting server on port 25565 (F5 pressed)")
+            print("Your world is now open for others to join!")
+
+            -- Give the host's ship a network ID so it can be synced to clients
+            if self.world.local_ship then
+                self.world.local_ship.network_id = Server.next_network_id
+                Server.next_network_id = Server.next_network_id + 1
+                print("Host ship assigned network_id=" .. self.world.local_ship.network_id)
+            end
+        end
+        return
+    end
+
     -- 2. Standard Game Keys
     if key == "tab" then
         if self.world and self.world.ui then
@@ -309,7 +488,7 @@ function PlayState:keypressed(key)
                 self.world.ui.cargo_drag.active = false
             end
         end
-    elseif key == "f5" then
+    elseif key == "f6" then
         SaveManager.save(1, self.world, self.player)
     elseif key == "f9" then
         if SaveManager.has_save(1) then
@@ -330,35 +509,8 @@ function PlayState:mousepressed(x, y, button)
         return
     end
 
-    if not (self.world and self.world.ui and self.world.ui.cargo_open) then
+    if CargoPanel.mousepressed(x, y, button, self.world) then
         return
-    end
-
-    local wx, wy, ww, wh = CargoPanel.getWindowRect(self.world)
-    local layout = Window.getLayout({ x = wx, y = wy, width = ww, height = wh })
-    local r = layout.close
-
-    -- Close button
-    if x >= r.x and x <= r.x + r.w and y >= r.y and y <= r.y + r.h then
-        self.world.ui.cargo_open = false
-        if self.world.ui.cargo_drag then
-            self.world.ui.cargo_drag.active = false
-        end
-        return
-    end
-
-    -- Begin dragging when clicking the title bar (excluding close button)
-    local tb = layout.titleBar
-    if x >= tb.x and x <= tb.x + tb.w and y >= tb.y and y <= tb.y + tb.h then
-        local ui = self.world.ui
-        ui.cargo_drag = ui.cargo_drag or {}
-        ui.cargo_drag.active = true
-        ui.cargo_drag.offset_x = x - wx
-        ui.cargo_drag.offset_y = y - wy
-
-        ui.cargo_window = ui.cargo_window or {}
-        ui.cargo_window.width = ww
-        ui.cargo_window.height = wh
     end
 end
 
@@ -367,11 +519,9 @@ function PlayState:mousereleased(x, y, button)
         return
     end
 
-    if not (self.world and self.world.ui and self.world.ui.cargo_drag) then
+    if CargoPanel.mousereleased(x, y, button, self.world) then
         return
     end
-
-    self.world.ui.cargo_drag.active = false
 end
 
 function PlayState:wheelmoved(x, y)

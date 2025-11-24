@@ -19,7 +19,7 @@ if exist "%ZIP_PATH%" del "%ZIP_PATH%"
 
 :: Create the .love file (Zip archive) using PowerShell
 :: Compress to a temporary .zip first, then rename to .love
-powershell -command "Compress-Archive -Path 'main.lua', 'conf.lua', 'src', 'lib' -DestinationPath '%ZIP_PATH%' -Force"
+powershell -command "Compress-Archive -Path 'main.lua', 'conf.lua', 'src', 'lib', 'assets' -DestinationPath '%ZIP_PATH%' -Force"
 if exist "%ZIP_PATH%" ren "%ZIP_PATH%" "%OUTPUT_NAME%"
 
 echo.

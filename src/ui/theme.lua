@@ -2,17 +2,28 @@ local Theme = {}
 
 -- Core palette for the custom UI / HUD library.
 Theme.colors = {
-    background = {0.01, 0.015, 0.035, 1.0},
-    textPrimary = {1.0, 1.0, 1.0, 1.0},
-    textMuted = {0.78, 0.8, 0.82, 1.0},
+    background = { 0.01, 0.015, 0.035, 1.0 },
+    textPrimary = { 1.0, 1.0, 1.0, 1.0 },
+    textMuted = { 0.78, 0.8, 0.82, 1.0 },
     button = {
-        fill = {0.0, 0.0, 0.0, 0.05},
-        fillHover = {0.0, 0.0, 0.0, 0.12},
-        fillActive = {0.0, 0.0, 0.0, 0.18},
-        outline = {1.0, 1.0, 1.0, 0.65},
-        outlineHover = {1.0, 1.0, 1.0, 0.85},
-        outlineActive = {1.0, 1.0, 1.0, 1.0},
+        fill = { 0.0, 0.0, 0.0, 0.05 },
+        fillHover = { 0.0, 0.0, 0.0, 0.12 },
+        fillActive = { 0.0, 0.0, 0.0, 0.18 },
+        outline = { 1.0, 1.0, 1.0, 0.65 },
+        outlineHover = { 1.0, 1.0, 1.0, 0.85 },
+        outlineActive = { 1.0, 1.0, 1.0, 1.0 },
     },
+    cargo = {
+        barBackground = { 0.08, 0.05, 0.07, 0.9 },
+        barFill = { 0.3, 0.8, 0.95, 0.95 },
+        barFillWarning = { 0.95, 0.7, 0.25, 0.95 },
+        barFillCritical = { 0.95, 0.25, 0.25, 0.95 },
+        barOutline = { 0.3, 0.3, 0.35, 0.9 },
+        slotBackground = { 0.15, 0.15, 0.2, 0.5 },
+        slotOutline = { 0.3, 0.3, 0.35, 0.8 },
+        textCount = { 1.0, 1.0, 0.8, 1.0 },
+        textName = { 0.85, 0.85, 0.85, 1.0 },
+    }
 }
 
 -- Shape and spacing tokens used by controls.
@@ -29,11 +40,11 @@ Theme.spacing = {
 }
 
 Theme.fonts = {
-    title = {path = "assets/fonts/Orbitron-Regular.ttf", size = 128},
-    button = {path = "assets/fonts/Orbitron-Regular.ttf", size = 20},
-    chat = {path = "assets/fonts/Orbitron-Regular.ttf", size = 14},
-    header = {path = "assets/fonts/Orbitron-Regular.ttf", size = 16},
-    default = {path = "assets/fonts/Orbitron-Regular.ttf", size = 12},
+    title = { path = "assets/fonts/Orbitron-Regular.ttf", size = 128 },
+    button = { path = "assets/fonts/Orbitron-Regular.ttf", size = 20 },
+    chat = { path = "assets/fonts/Orbitron-Regular.ttf", size = 14 },
+    header = { path = "assets/fonts/Orbitron-Regular.ttf", size = 16 },
+    default = { path = "assets/fonts/Orbitron-Regular.ttf", size = 12 },
 }
 
 local fontCache = {}

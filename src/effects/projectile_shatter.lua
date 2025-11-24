@@ -1,6 +1,6 @@
 -- Projectile shatter effect system
 -- Creates realistic shard particles when projectiles impact
-local Concord = require "concord"
+local Concord = require "lib.concord.concord"
 
 local ProjectileShatter = {}
 

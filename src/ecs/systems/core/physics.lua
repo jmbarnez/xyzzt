@@ -1,4 +1,4 @@
-local Concord = require "concord"
+local Concord = require "lib.concord.concord"
 local Config = require "src.config"
 
 local PhysicsSystem = Concord.system({

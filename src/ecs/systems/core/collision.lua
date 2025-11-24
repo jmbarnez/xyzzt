@@ -1,4 +1,4 @@
-local Concord = require "concord"
+local Concord = require "lib.concord.concord"
 local CollisionHandlers = require "src.utils.collision_handlers"
 
 local CollisionSystem = Concord.system({})

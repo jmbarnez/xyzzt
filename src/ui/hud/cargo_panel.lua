@@ -69,7 +69,7 @@ function CargoPanel.draw(world, player)
 
     -- Volume and mass text with proper units
     local infoText = string.format("Volume: %.1f/%.1f m³  |  Mass: %.1f kg", used, capacity, mass)
-    love.graphics.setColor(Theme.colors.textPrimary or { 0.9, 0.95, 1.0, 1.0 })
+    love.graphics.setColor(Theme.colors.textPrimary)
     love.graphics.print(infoText, bottomBar.x + 10, bottomBar.y + 4)
 
     -- Capacity bar on the right side of bottom bar
@@ -84,23 +84,24 @@ function CargoPanel.draw(world, player)
     end
 
     -- Bar background
-    love.graphics.setColor(0.08, 0.05, 0.07, 0.9)
+    local cColors = Theme.colors.cargo
+    love.graphics.setColor(cColors.barBackground)
     love.graphics.rectangle("fill", barX, barY, barWidth, barHeight, 2, 2)
 
     -- Bar fill
     if pct > 0 then
-        local fillColor = { 0.3, 0.8, 0.95, 0.95 }
+        local fillColor = cColors.barFill
         if pct > 0.9 then
-            fillColor = { 0.95, 0.25, 0.25, 0.95 }
+            fillColor = cColors.barFillCritical
         elseif pct > 0.7 then
-            fillColor = { 0.95, 0.7, 0.25, 0.95 }
+            fillColor = cColors.barFillWarning
         end
         love.graphics.setColor(fillColor)
         love.graphics.rectangle("fill", barX, barY, barWidth * pct, barHeight, 2, 2)
     end
 
     -- Bar outline
-    love.graphics.setColor(0.3, 0.3, 0.35, 0.9)
+    love.graphics.setColor(cColors.barOutline)
     love.graphics.setLineWidth(1)
     love.graphics.rectangle("line", barX, barY, barWidth, barHeight, 2, 2)
 
@@ -124,7 +125,7 @@ function CargoPanel.draw(world, player)
     table.sort(items, function(a, b) return a.name < b.name end)
 
     if #items == 0 then
-        love.graphics.setColor(0.6, 0.6, 0.75, 1)
+        love.graphics.setColor(Theme.colors.textMuted)
         love.graphics.print("Empty", cx, cy)
         return
     end
@@ -132,10 +133,6 @@ function CargoPanel.draw(world, player)
     local slotSize = 64 -- Increased from 32 to fit icon + text
     local slotGap = 8
     local cols = math.max(1, math.floor((cw + slotGap) / (slotSize + slotGap)))
-
-    local textColor = { 0.9, 0.95, 1.0, 1.0 }
-    local countColor = { 1.0, 1.0, 0.8, 1.0 } -- Slightly yellow for visibility
-    local nameColor = { 0.85, 0.85, 0.85, 1.0 }
 
     -- Load item definitions for rendering icons
     local ItemDefinitions = require "src.data.items"
@@ -154,9 +151,9 @@ function CargoPanel.draw(world, player)
         end
 
         -- Draw slot background (subtle)
-        love.graphics.setColor(0.15, 0.15, 0.2, 0.5)
+        love.graphics.setColor(cColors.slotBackground)
         love.graphics.rectangle("fill", sx, sy, slotSize, slotSize, 2, 2)
-        love.graphics.setColor(0.3, 0.3, 0.35, 0.8)
+        love.graphics.setColor(cColors.slotOutline)
         love.graphics.setLineWidth(1)
         love.graphics.rectangle("line", sx, sy, slotSize, slotSize, 2, 2)
 
@@ -204,7 +201,7 @@ function CargoPanel.draw(world, player)
         love.graphics.setColor(0, 0, 0, 0.7)
         love.graphics.rectangle("fill", sx + slotSize - countW - 4, sy + 2, countW + 4, countH + 2, 1, 1)
 
-        love.graphics.setColor(countColor)
+        love.graphics.setColor(cColors.textCount)
         love.graphics.print(countText, sx + slotSize - countW - 2, sy + 2)
 
         -- Draw name at bottom-center of slot
@@ -213,9 +210,79 @@ function CargoPanel.draw(world, player)
         local nameX = sx + (slotSize - nameW) * 0.5
         local nameY = sy + slotSize - countH - 2
 
-        love.graphics.setColor(nameColor)
+        love.graphics.setColor(cColors.textName)
         love.graphics.print(nameText, nameX, nameY)
     end
+end
+
+function CargoPanel.update(dt, world)
+    local ui = world and world.ui
+    if ui and ui.cargo_drag and ui.cargo_drag.active and ui.cargo_open then
+        local mx, my = love.mouse.getPosition()
+        local wx, wy, ww, wh = CargoPanel.getWindowRect(world)
+
+        local drag = ui.cargo_drag
+        local new_x = mx - drag.offset_x
+        local new_y = my - drag.offset_y
+
+        local sw, sh = love.graphics.getDimensions()
+        new_x = math.max(0, math.min(new_x, sw - ww))
+        new_y = math.max(0, math.min(new_y, sh - wh))
+
+        ui.cargo_window = ui.cargo_window or {}
+        ui.cargo_window.x = new_x
+        ui.cargo_window.y = new_y
+        ui.cargo_window.width = ww
+        ui.cargo_window.height = wh
+        return true
+    end
+    return false
+end
+
+function CargoPanel.mousepressed(x, y, button, world)
+    if button ~= 1 then return false end
+    if not (world and world.ui and world.ui.cargo_open) then return false end
+
+    local wx, wy, ww, wh = CargoPanel.getWindowRect(world)
+    local layout = Window.getLayout({ x = wx, y = wy, width = ww, height = wh })
+    local r = layout.close
+
+    -- Close button
+    if x >= r.x and x <= r.x + r.w and y >= r.y and y <= r.y + r.h then
+        world.ui.cargo_open = false
+        if world.ui.cargo_drag then
+            world.ui.cargo_drag.active = false
+        end
+        return true -- Consumed
+    end
+
+    -- Begin dragging when clicking the title bar (excluding close button)
+    local tb = layout.titleBar
+    if x >= tb.x and x <= tb.x + tb.w and y >= tb.y and y <= tb.y + tb.h then
+        local ui = world.ui
+        ui.cargo_drag = ui.cargo_drag or {}
+        ui.cargo_drag.active = true
+        ui.cargo_drag.offset_x = x - wx
+        ui.cargo_drag.offset_y = y - wy
+
+        ui.cargo_window = ui.cargo_window or {}
+        ui.cargo_window.width = ww
+        ui.cargo_window.height = wh
+        return true -- Consumed
+    end
+
+    return false
+end
+
+function CargoPanel.mousereleased(x, y, button, world)
+    if button ~= 1 then return false end
+    if not (world and world.ui and world.ui.cargo_drag) then return false end
+
+    if world.ui.cargo_drag.active then
+        world.ui.cargo_drag.active = false
+        return true -- Consumed
+    end
+    return false
 end
 
 return CargoPanel

@@ -1,4 +1,4 @@
-local Concord = require "concord"
+local Concord = require "lib.concord.concord"
 local MathUtils = require "src.utils.math_utils"
 
 -- This system now has two distinct responsibilities:

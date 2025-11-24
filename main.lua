@@ -30,7 +30,7 @@ function love.load()
     end
 
     -- Load the actual game logic
-    require("game")
+    require("src.game")
     -- Forward the love.load call to the game state
     if love.load then love.load() end
 end

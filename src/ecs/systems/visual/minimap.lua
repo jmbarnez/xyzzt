@@ -1,5 +1,5 @@
 -- src/systems/minimap.lua
-local Concord       = require "concord"
+local Concord       = require "lib.concord.concord"
 local Config        = require "src.config"
 
 local MinimapSystem = Concord.system({

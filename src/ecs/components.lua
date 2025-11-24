@@ -1,4 +1,4 @@
-local Concord = require "concord"
+local Concord = require "lib.concord.concord"
 
 -- The standard local transform (Float relative to sector center)
 Concord.component("transform", function(c, x, y, r)

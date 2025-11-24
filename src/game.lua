@@ -1,22 +1,34 @@
 -- src/game.lua
 -- This is now just the entry point that registers events and starts the Menu.
 
-local Gamestate     = require "hump.gamestate"
-local Config        = require "src.config"
-local MenuState     = require "src.states.menu"
-local Lurker        = require "lurker"
+local Gamestate      = require "lib.hump.gamestate"
+local Config         = require "src.config"
+local MenuState      = require "src.states.menu"
 local WeaponRegistry = require "src.managers.weapon_registry"
+
+-- Only load lurker in development (not in .love builds)
+local Lurker
+if not love.filesystem.isFused() then
+    local source = love.filesystem.getSource()
+    -- Check if we're running from a .love file
+    if not source:match("%.love$") then
+        Lurker = require "lib.lurker"
+    end
+end
 
 function love.load()
     -- Initialize game and load plugins
     WeaponRegistry.load_plugins()
-    
+
     -- Start game in Menu
     Gamestate.switch(MenuState)
 end
 
 function love.update(dt)
-    Lurker.update(dt)
+    -- Only update lurker if it's loaded (development mode)
+    if Lurker then
+        Lurker.update(dt)
+    end
     Gamestate.update(dt)
 end
 

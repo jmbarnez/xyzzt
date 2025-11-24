@@ -1,4 +1,4 @@
-local Concord = require "concord"
+local Concord = require "lib.concord.concord"
 local EntityUtils = require "src.utils.entity_utils"
 local ProjectileShatter = require "src.effects.projectile_shatter"
 
