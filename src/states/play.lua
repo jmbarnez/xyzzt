@@ -89,6 +89,7 @@ function PlayState:enter(prev, param)
             offset_x = 0,
             offset_y = 0,
         },
+        hover_target = nil,
     }
 
     -- Init Chat
@@ -227,6 +228,39 @@ function PlayState:update(dt)
     end
 
     self.world:emit("update", dt)
+
+    if self.world and self.world.camera and self.world.ui then
+        local mx, my = love.mouse.getPosition()
+        local wx, wy = self.world.camera:worldCoords(mx, my)
+
+        local player = self.player
+        local ship = player and player.controlling and player.controlling.entity or nil
+        local ship_sector_x = ship and ship.sector and ship.sector.x or 0
+        local ship_sector_y = ship and ship.sector and ship.sector.y or 0
+
+        local best
+        local bestDist2
+        for _, e in ipairs(self.world:getEntities()) do
+            local t = e.transform
+            local s = e.sector
+            local r = e.render
+            if t and s and r and r.radius and (e.asteroid or e.asteroid_chunk or e.vehicle) then
+                local diff_x = (s.x or 0) - ship_sector_x
+                local diff_y = (s.y or 0) - ship_sector_y
+                local ex = t.x + diff_x * Config.SECTOR_SIZE
+                local ey = t.y + diff_y * Config.SECTOR_SIZE
+                local dx = wx - ex
+                local dy = wy - ey
+                local dist2 = dx * dx + dy * dy
+                local pickRadius = r.radius * 1.2
+                if dist2 <= pickRadius * pickRadius and (not bestDist2 or dist2 < bestDist2) then
+                    best = e
+                    bestDist2 = dist2
+                end
+            end
+        end
+        self.world.ui.hover_target = best
+    end
 
     -- Update cargo window drag (if any)
     local ui = self.world and self.world.ui

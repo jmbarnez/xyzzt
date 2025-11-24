@@ -150,6 +150,10 @@ function RenderStrategies.asteroid(e)
         end
 
         poly = asteroidShapes[key]
+        -- Store generated vertices in component for outline rendering
+        if poly and type(r) == "table" then
+            r.vertices = poly
+        end
     end
 
     -- Load shader on first use
@@ -311,6 +315,10 @@ function RenderStrategies.asteroid_chunk(e)
         end
 
         poly = asteroidShapes[key]
+        -- Store generated vertices in component for outline rendering
+        if poly and type(r) == "table" then
+            r.vertices = poly
+        end
     end
 
     -- Load shader on first use

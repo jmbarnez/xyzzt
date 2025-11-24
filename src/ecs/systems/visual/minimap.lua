@@ -13,6 +13,7 @@ local MinimapSystem = Concord.system({
 local MAP_SIZE      = 130 -- Size of the minimap in pixels (square)
 local MAP_MARGIN    = 20  -- Margin from the top-right corner
 local ZOOM_LEVEL    = 0.1 -- Scale factor (how much world area is shown)
+local CORNER_RADIUS = 12  -- Radius for rounded corners
 local BORDER_COLOR  = { 1, 1, 1, 0.65 }
 local BG_COLOR      = { 0.01, 0.015, 0.035, 1.0 }
 
@@ -52,17 +53,17 @@ function MinimapSystem:draw()
 
     -- Draw Background (square with slight rounding)
     love.graphics.setColor(BG_COLOR)
-    love.graphics.rectangle("fill", map_x, map_y, MAP_SIZE, MAP_SIZE, 2, 2)
+    love.graphics.rectangle("fill", map_x, map_y, MAP_SIZE, MAP_SIZE, CORNER_RADIUS, CORNER_RADIUS)
 
     -- Draw Border
     love.graphics.setColor(BORDER_COLOR)
     love.graphics.setLineWidth(1.5)
-    love.graphics.rectangle("line", map_x, map_y, MAP_SIZE, MAP_SIZE, 2, 2)
+    love.graphics.rectangle("line", map_x, map_y, MAP_SIZE, MAP_SIZE, CORNER_RADIUS, CORNER_RADIUS)
 
     -- 4. Draw Entities (Clipped to Minimap)
     -- Use a stencil rectangle to clip drawing to the minimap area
     love.graphics.stencil(function()
-        love.graphics.rectangle("fill", map_x, map_y, MAP_SIZE, MAP_SIZE)
+        love.graphics.rectangle("fill", map_x, map_y, MAP_SIZE, MAP_SIZE, CORNER_RADIUS, CORNER_RADIUS)
     end, "replace", 1)
     love.graphics.setStencilTest("greater", 0)
 

@@ -150,6 +150,33 @@ function RenderSystem:draw()
 
                 RenderStrategies.draw(e)
 
+                if world and world.ui and world.ui.hover_target == e then
+                    -- Bright Cyan Outline
+                    love.graphics.setColor(0, 1, 1, 1)
+                    love.graphics.setLineWidth(2) -- Slightly thicker for visibility
+
+                    if type(r) == "table" then
+                        if r.vertices then
+                            love.graphics.polygon("line", r.vertices)
+                        elseif r.shape then
+                            love.graphics.polygon("line", r.shape)
+                        elseif r.shapes then
+                            for _, shape in ipairs(r.shapes) do
+                                if shape.type == "polygon" and shape.points then
+                                    love.graphics.polygon("line", shape.points)
+                                elseif shape.type == "circle" then
+                                    local cx = shape.x or 0
+                                    local cy = shape.y or 0
+                                    local rad = shape.radius or 2
+                                    love.graphics.circle("line", cx, cy, rad)
+                                end
+                            end
+                        end
+                    end
+
+                    love.graphics.setLineWidth(1)
+                end
+
                 -- Debug: Draw a small red dot at the center to ensure it's being drawn at all
                 -- love.graphics.setColor(1, 0, 0, 1)
                 -- love.graphics.circle("fill", 0, 0, 2)

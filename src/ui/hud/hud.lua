@@ -2,6 +2,7 @@ local Theme = require "src.ui.theme"
 local Config = require "src.config"
 local StatusPanel = require "src.ui.hud.status_panel"
 local CargoPanel = require "src.ui.hud.cargo_panel"
+local TargetPanel = require "src.ui.hud.target_panel"
 
 local HUD = {}
 
@@ -10,6 +11,8 @@ function HUD.draw(world, player)
     
     -- Draw status panel (top-left)
     StatusPanel.draw(player)
+
+    TargetPanel.draw(world, player)
 
     -- Draw cargo panel (bottom-right) when opened
     if world and world.ui and world.ui.cargo_open then
