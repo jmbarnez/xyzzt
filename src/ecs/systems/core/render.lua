@@ -112,39 +112,7 @@ function RenderSystem:draw()
                 love.graphics.push()
                 love.graphics.translate(relative_x, relative_y)
 
-                -- Health bar rendering for ALL entities with hp component (before rotation)
-                if e.hp and e.hp.max and e.hp.current and e.hp.current < e.hp.max and e.hp.last_hit_time then
-                    local now = (love and love.timer and love.timer.getTime) and love.timer.getTime() or nil
-                    if now then
-                        local elapsed = now - (e.hp.last_hit_time or 0)
-                        local visible_duration = 2.0
-                        if elapsed >= 0 and elapsed <= visible_duration then
-                            local pct = 0
-                            if e.hp.max > 0 then
-                                pct = math.max(0, math.min(1, e.hp.current / e.hp.max))
-                            end
 
-                            -- Determine entity radius for bar sizing
-                            local entity_radius = 10 -- default
-                            if type(r) == "table" and r.radius then
-                                entity_radius = r.radius
-                            end
-
-                            local bar_width = entity_radius * 2
-                            local bar_height = 4
-                            local y_offset = -entity_radius - 10
-
-                            love.graphics.setColor(0, 0, 0, 0.7)
-                            love.graphics.rectangle("fill", -bar_width * 0.5, y_offset, bar_width, bar_height, 2, 2)
-
-                            love.graphics.setColor(1.0, 0.9, 0.25, 1.0)
-                            love.graphics.rectangle("fill", -bar_width * 0.5, y_offset, bar_width * pct, bar_height, 2, 2)
-
-                            love.graphics.setColor(0, 0, 0, 1.0)
-                            love.graphics.rectangle("line", -bar_width * 0.5, y_offset, bar_width, bar_height, 2, 2)
-                        end
-                    end
-                end
 
                 love.graphics.rotate(t.r or 0)
 

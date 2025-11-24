@@ -1,5 +1,6 @@
 local Concord   = require "concord"
 local Config    = require "src.config"
+local ChunkTypes = require "src.data.chunks"
 
 local Asteroids = {}
 
@@ -18,6 +19,73 @@ local AsteroidTypeList = {
 	AsteroidTypes.rocky,
 	AsteroidTypes.metallic,
 }
+
+local function clamp01(v)
+	if v < 0 then return 0 end
+	if v > 1 then return 1 end
+	return v
+end
+
+local function mix_resource_colors(composition)
+	if not composition then
+		return { 0.6, 0.6, 0.6, 1 }
+	end
+
+	local r, g, b, a, total = 0, 0, 0, 0, 0
+	for res, weight in pairs(composition) do
+		if weight and weight > 0 then
+			local def = ChunkTypes[res]
+			if def and def.color then
+				local c = def.color
+				r = r + (c[1] or 1) * weight
+				g = g + (c[2] or 1) * weight
+				b = b + (c[3] or 1) * weight
+				a = a + (c[4] or 1) * weight
+				total = total + weight
+			end
+		end
+	end
+
+	if total > 0 then
+		return {
+			clamp01(r / total),
+			clamp01(g / total),
+			clamp01(b / total),
+			clamp01(a / total),
+		}
+	end
+
+	return { 0.6, 0.6, 0.6, 1 }
+end
+
+local function jitter_color(base, rng)
+	local j = 0.08
+
+	local br = base[1] or 1
+	local bg = base[2] or 1
+	local bb = base[3] or 1
+	local ba = base[4] or 1
+
+	local function rand01()
+		if rng and type(rng) == "table" and rng.random then
+			return rng:random()
+		else
+			return math.random()
+		end
+	end
+
+	local function jitter_channel(c)
+		local shift = (rand01() - 0.5) * 2 * j
+		return clamp01(c + shift)
+	end
+
+	return {
+		jitter_channel(br),
+		jitter_channel(bg),
+		jitter_channel(bb),
+		ba,
+	}
+end
 
 local function spawn_single(world, sector_x, sector_y, x, y, radius, color)
     local body = love.physics.newBody(world.physics_world, x, y, "dynamic")
@@ -102,74 +170,27 @@ function Asteroids.spawnField(world, sector_x, sector_y, seed, count)
         local y = math.sin(a) * r
 
         local radius
-        local color
-
-        local function clamp01(v)
-            if v < 0.1 then return 0.1 end
-            if v > 0.9 then return 0.9 end
-            return v
-        end
-
         if type(rng) == "table" and rng.random then
             radius = 10 + rng:random() * 70
-
-            local tone = 0.25 + rng:random() * 0.5 -- overall brightness
-            local warm = rng:random()              -- 0 = gray, 1 = warm brown
-
-            if warm > 0.4 then
-                -- Warm brown rock
-                local r_t = tone + 0.25
-                local g_t = tone + 0.1 * rng:random()
-                local b_t = tone * 0.4
-                color = { clamp01(r_t), clamp01(g_t), clamp01(b_t), 1 }
-            else
-                -- Cooler / neutral gray
-                local shift = (rng:random() - 0.5) * 0.2
-                local g_tone = tone
-                color = {
-                    clamp01(g_tone + shift),
-                    clamp01(g_tone + shift * 0.5),
-                    clamp01(g_tone - shift),
-                    1
-                }
-            end
         else
             radius = 10 + math.random() * 70
-
-            local tone = 0.25 + math.random() * 0.5
-            local warm = math.random()
-
-            if warm > 0.4 then
-                local r_t = tone + 0.25
-                local g_t = tone + 0.1 * math.random()
-                local b_t = tone * 0.4
-                color = { clamp01(r_t), clamp01(g_t), clamp01(b_t), 1 }
-            else
-                local shift = (math.random() - 0.5) * 0.2
-                local g_tone = tone
-                color = {
-                    clamp01(g_tone + shift),
-                    clamp01(g_tone + shift * 0.5),
-                    clamp01(g_tone - shift),
-                    1
-                }
-            end
         end
 
-        local asteroid = spawn_single(world, sector_x or 0, sector_y or 0, x, y, radius, color)
-        if asteroid then
-            local at
-            if type(rng) == "table" and rng.random then
-                at = AsteroidTypeList[rng:random(1, #AsteroidTypeList)]
-            else
-                at = AsteroidTypeList[math.random(1, #AsteroidTypeList)]
-            end
+        local at
+        if type(rng) == "table" and rng.random then
+            at = AsteroidTypeList[rng:random(1, #AsteroidTypeList)]
+        else
+            at = AsteroidTypeList[math.random(1, #AsteroidTypeList)]
+        end
 
-            if at then
-                asteroid:give("asteroid_composition", at.composition)
-                if not asteroid.name then
-                    asteroid:give("name", at.name)
-                end
+        local base_color = mix_resource_colors(at and at.composition)
+        local color = jitter_color(base_color, rng)
+
+        local asteroid = spawn_single(world, sector_x or 0, sector_y or 0, x, y, radius, color)
+        if asteroid and at then
+            asteroid:give("asteroid_composition", at.composition)
+            if not asteroid.name then
+                asteroid:give("name", at.name)
             end
         end
     end
