@@ -35,6 +35,7 @@ local TrailSystem           = require "src.ecs.systems.visual.trail"
 local DefaultSector         = require "src.data.default_sector"
 
 local PlayState             = {}
+PlayState.server_time_offset = nil
 
 local function createLocalPlayer(world)
     local player = Concord.entity(world)
@@ -150,6 +151,17 @@ function PlayState:enter(prev, param)
             return
         end
 
+        local now = love.timer.getTime()
+        if packet.server_time then
+            local offset = now - packet.server_time
+            if self.server_time_offset == nil then
+                self.server_time_offset = offset
+            else
+                self.server_time_offset = self.server_time_offset * 0.9 + offset * 0.1
+            end
+        end
+        local time_offset = self.server_time_offset or 0
+
         -- Apply world state to entities (CLIENTS ONLY)
         for _, state in ipairs(packet.entities) do
             local entity = self.world.networked_entities[state.id]
@@ -207,7 +219,7 @@ function PlayState:enter(prev, param)
                     -- Add this state to the buffer
                     Interpolation.addState(
                         buffer,
-                        packet.server_time or love.timer.getTime(),
+                        (packet.server_time and (packet.server_time + time_offset)) or now,
                         state.x,
                         state.y,
                         state.r,
