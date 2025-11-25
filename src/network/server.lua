@@ -3,7 +3,7 @@
 
 local enet = require "enet"
 local Protocol = require "src.network.protocol"
-local ServerWorld = require "src.network.server_world"
+
 
 local Server = {
     host = nil,

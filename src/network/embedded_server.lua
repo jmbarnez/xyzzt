@@ -38,7 +38,7 @@ local Protocol = require "src.network.protocol"
 -- (Concord components must be registered in each Lua state)
 require "src.ecs.components"
 
-local ServerWorld = require "src.network.server_world"
+-- local ServerWorld = require "src.network.server_world"
 
 local channel_in = love.thread.getChannel("server_in")
 local channel_out = love.thread.getChannel("server_out")
@@ -66,7 +66,7 @@ function Server.start(port)
 
     Server.host = host
     Server.running = true
-    Server.world = ServerWorld.new()
+    -- Server.world = ServerWorld.new() -- TODO: Re-implement server world logic
 
     channel_out:push({type = "started", port = Server.port})
 

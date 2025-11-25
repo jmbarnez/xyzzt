@@ -10,32 +10,33 @@ local SaveManager   = require "src.managers.save_manager"
 local Window        = require "src.ui.hud.window"
 local CargoPanel    = require "src.ui.hud.cargo_panel"
 local Interpolation = require "src.network.interpolation"
+local EntityUtils   = require "src.utils.entity_utils"
 
 require "src.ecs.components"
 
 -- System Imports
-local PlayerControlSystem   = require "src.ecs.systems.gameplay.player_control"
-local MovementSystem        = require "src.ecs.systems.core.movement"
-local DeathSystem           = require "src.ecs.systems.gameplay.death"
-local LootSystem            = require "src.ecs.systems.gameplay.loot"
-local CollisionSystem       = require "src.ecs.systems.core.collision"
+local PlayerControlSystem         = require "src.ecs.systems.gameplay.player_control"
+local MovementSystem              = require "src.ecs.systems.core.movement"
+local DeathSystem                 = require "src.ecs.systems.gameplay.death"
+local LootSystem                  = require "src.ecs.systems.gameplay.loot"
+local CollisionSystem             = require "src.ecs.systems.core.collision"
 
-local MinimapSystem         = require "src.ecs.systems.visual.minimap"
-local PhysicsSystem         = require "src.ecs.systems.core.physics"
-local RenderSystem          = require "src.ecs.systems.core.render"
-local ShipSystem            = require "src.ecs.spawners.ship"
-local Asteroids             = require "src.ecs.spawners.asteroid"
-local EnemySpawner          = require "src.ecs.spawners.enemy"
-local WeaponSystem          = require "src.ecs.systems.gameplay.weapon"
-local ProjectileSystem      = require "src.ecs.systems.gameplay.projectile"
-local AsteroidChunkSystem   = require "src.ecs.systems.gameplay.asteroid_chunk"
-local ProjectileShardSystem = require "src.ecs.systems.visual.projectile_shard"
-local ItemPickupSystem      = require "src.ecs.systems.gameplay.item_pickup"
-local TrailSystem           = require "src.ecs.systems.visual.trail"
-local DefaultSector         = require "src.data.default_sector"
+local MinimapSystem               = require "src.ecs.systems.visual.minimap"
+local PhysicsSystem               = require "src.ecs.systems.core.physics"
+local RenderSystem                = require "src.ecs.systems.core.render"
+local ShipSystem                  = require "src.ecs.spawners.ship"
+local Asteroids                   = require "src.ecs.spawners.asteroid"
+local EnemySpawner                = require "src.ecs.spawners.enemy"
+local WeaponSystem                = require "src.ecs.systems.gameplay.weapon"
+local ProjectileSystem            = require "src.ecs.systems.gameplay.projectile"
+local AsteroidChunkSystem         = require "src.ecs.systems.gameplay.asteroid_chunk"
+local ProjectileShardSystem       = require "src.ecs.systems.visual.projectile_shard"
+local ItemPickupSystem            = require "src.ecs.systems.gameplay.item_pickup"
+local TrailSystem                 = require "src.ecs.systems.visual.trail"
+local DefaultSector               = require "src.data.default_sector"
 
-local PlayState             = {}
-PlayState.server_time_offset = nil
+local PlayState                   = {}
+PlayState.server_time_offset      = nil
 local debugPrintedRemoteAsteroids = {}
 
 local function createLocalPlayer(world)
@@ -209,6 +210,7 @@ function PlayState:enter(prev, param)
     -- Track networked entities by network_id
     self.world.networked_entities = {}    -- Map of network_id -> entity
     self.world.interpolation_buffers = {} -- Map of network_id -> interpolation buffer
+    self.player_entity_ids = {}           -- Map of player_id -> entity_id
 
     -- Set up network callbacks
     Client.setWorldStateCallback(function(packet)
@@ -228,8 +230,12 @@ function PlayState:enter(prev, param)
         end
         local time_offset = self.server_time_offset or 0
 
+        -- Track which network IDs were received in this packet
+        local received_ids = {}
+
         -- Apply world state to entities (CLIENTS ONLY)
         for _, state in ipairs(packet.entities) do
+            received_ids[state.id] = true
             local entity = self.world.networked_entities[state.id]
 
             if entity then
@@ -263,8 +269,56 @@ function PlayState:enter(prev, param)
                         end
                     end
                 else
-                    -- For REMOTE ships and asteroids: use interpolation
-                    -- Add state to interpolation buffer
+                    -- For REMOTE ships and asteroids: use interpolation WITH error correction
+
+                    -- Determine threshold based on entity type
+                    local snap_threshold
+                    if state.type == "vehicle" then
+                        snap_threshold = Config.RECONCILE_REMOTE_SHIP or 100
+                    elseif state.type == "projectile" then
+                        snap_threshold = Config.RECONCILE_PROJECTILE or 25
+                    else -- asteroids and chunks
+                        snap_threshold = Config.RECONCILE_ASTEROID or 50
+                    end
+
+                    -- Check for position drift
+                    local should_snap = false
+                    if entity.transform then
+                        local dx = entity.transform.x - state.x
+                        local dy = entity.transform.y - state.y
+                        local dist_sq = dx * dx + dy * dy
+                        local threshold_sq = snap_threshold * snap_threshold
+
+                        if dist_sq > threshold_sq then
+                            should_snap = true
+                        end
+                    end
+
+                    if should_snap then
+                        -- Position has drifted too far, snap to server position
+                        if entity.transform then
+                            entity.transform.x = state.x
+                            entity.transform.y = state.y
+                            entity.transform.r = state.r
+                        end
+
+                        if entity.physics and entity.physics.body and not entity.physics.body:isDestroyed() then
+                            entity.physics.body:setPosition(state.x, state.y)
+                            entity.physics.body:setAngle(state.r)
+
+                            if state.vx and state.vy then
+                                entity.physics.body:setLinearVelocity(state.vx, state.vy)
+                            end
+                            if state.angular_velocity then
+                                entity.physics.body:setAngularVelocity(state.angular_velocity)
+                            end
+                        end
+
+                        -- Clear and reset interpolation buffer for smooth restart
+                        self.world.interpolation_buffers[state.id] = nil
+                    end
+
+                    -- Add state to interpolation buffer (for smooth movement between corrections)
                     local buffer = self.world.interpolation_buffers[state.id]
                     if not buffer then
                         buffer = Interpolation.createBuffer()
@@ -349,13 +403,35 @@ function PlayState:enter(prev, param)
                     asteroid:give("transform", state.x, state.y, state.r or 0)
                     asteroid:give("sector", state.sx, state.sy)
 
+                    -- Parse vertices from string if available
+                    local vertices = nil
+                    print("[CLIENT] Received asteroid " ..
+                        state.id ..
+                        ": vertices_str=" ..
+                        tostring(state.vertices_str ~= nil) .. ", vertices=" .. tostring(state.vertices ~= nil))
+                    if state.vertices_str then
+                        vertices = {}
+                        for num in string.gmatch(state.vertices_str, "[^,]+") do
+                            table.insert(vertices, tonumber(num))
+                        end
+                        print("[CLIENT] Parsed " .. #vertices .. " vertex coordinates from vertices_str")
+                    elseif state.vertices then
+                        vertices = state.vertices
+                        print("[CLIENT] Using direct vertices table with " .. #vertices .. " coords")
+                    end
+
                     asteroid:give("render", {
                         type = "asteroid",
                         color = state.color or { 0.6, 0.6, 0.6, 1 },
                         radius = state.radius or 30,
-                        vertices = state.vertices,
+                        vertices = vertices,
                         seed = state.seed,
                     })
+
+                    if not vertices then
+                        print("CLIENT WARNING: Spawning remote asteroid " ..
+                            state.id .. " WITHOUT VERTICES! Fallback to circle.")
+                    end
 
                     -- Store asteroid seed for any systems that rely on it
                     if state.seed then
@@ -377,7 +453,7 @@ function PlayState:enter(prev, param)
                         body:setAngularDamping(Config.LINEAR_DAMPING * 2)
 
                         local shape
-                        local verts = state.vertices
+                        local verts = vertices -- Use the parsed vertices
                         if type(verts) == "table" and #verts >= 6 and (#verts % 2 == 0) then
                             -- Box2D supports a maximum of 8 vertices per polygon
                             local maxCoords = 8 * 2
@@ -388,7 +464,16 @@ function PlayState:enter(prev, param)
                                 end
                                 verts = truncated
                             end
-                            shape = love.physics.newPolygonShape(verts)
+
+                            -- Validate polygon convexity/winding (simple check: just try to create it)
+                            local success, result = pcall(function() return love.physics.newPolygonShape(verts) end)
+                            if success then
+                                shape = result
+                            else
+                                print("CLIENT ERROR: Failed to create polygon shape for asteroid " ..
+                                    state.id .. ": " .. tostring(result))
+                                shape = love.physics.newCircleShape(state.radius or 30)
+                            end
                         else
                             -- Fallback: simple circle if vertices are missing or invalid
                             shape = love.physics.newCircleShape(state.radius or 30)
@@ -528,6 +613,33 @@ function PlayState:enter(prev, param)
                 end
             end
         end
+
+        -- Prune entities that were not received in this update (destroyed on server)
+        -- This prevents stale entities from lingering and causing issues like health rebounding
+        local entities_to_remove = {}
+        for net_id, entity in pairs(self.world.networked_entities) do
+            -- Don't remove our own ship or entities that were in this packet
+            if not received_ids[net_id] and net_id ~= self.my_entity_id then
+                table.insert(entities_to_remove, net_id)
+            end
+        end
+
+        -- Remove stale entities
+        for _, net_id in ipairs(entities_to_remove) do
+            local entity = self.world.networked_entities[net_id]
+            if entity then
+                -- Clean up physics body
+                EntityUtils.cleanup_physics_entity(entity)
+
+                -- Remove from tracking
+                self.world.networked_entities[net_id] = nil
+
+                -- Remove interpolation buffer
+                if self.world.interpolation_buffers then
+                    self.world.interpolation_buffers[net_id] = nil
+                end
+            end
+        end
     end)
 
     Client.setPlayerJoinedCallback(function(player_id, entity_id)
@@ -539,12 +651,33 @@ function PlayState:enter(prev, param)
             self.world.networked_entities[entity_id] = self.world.local_ship
             print("Registered local ship with network_id=" .. entity_id)
         end
+
+        if entity_id and entity_id ~= 0 then
+            self.player_entity_ids[player_id] = entity_id
+        end
     end)
 
     Client.setPlayerLeftCallback(function(player_id)
         print("Player left: " .. player_id)
         -- Note: We'll need to enhance this to remove the entity from networked_entities
         -- when we have a way to map player_id to entity_id
+
+        local entity_id = self.player_entity_ids and self.player_entity_ids[player_id]
+        if entity_id then
+            self.player_entity_ids[player_id] = nil
+
+            local entity = self.world.networked_entities and self.world.networked_entities[entity_id]
+            if entity then
+                if entity ~= self.world.local_ship then
+                    EntityUtils.cleanup_physics_entity(entity)
+                end
+                self.world.networked_entities[entity_id] = nil
+            end
+
+            if self.world.interpolation_buffers then
+                self.world.interpolation_buffers[entity_id] = nil
+            end
+        end
     end)
 
     -- Handle WELCOME packet (Authoritative Spawning)
@@ -552,6 +685,10 @@ function PlayState:enter(prev, param)
     Client.setWelcomeCallback(function(player_id, entity_id)
         print("Received WELCOME: You are player " .. player_id .. ", entity " .. tostring(entity_id))
         self.my_entity_id = entity_id
+
+        if player_id and entity_id and entity_id ~= 0 then
+            self.player_entity_ids[player_id] = entity_id
+        end
     end)
 
     -- Local controls
@@ -693,6 +830,10 @@ function PlayState:update(dt)
                             entity.physics.body:setAngularVelocity(interp_state.angular_velocity)
                         end
                     end
+                end
+            else
+                if Interpolation.isStale(buffer) then
+                    self.world.interpolation_buffers[id] = nil
                 end
             end
         end

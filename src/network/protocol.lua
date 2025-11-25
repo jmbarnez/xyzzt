@@ -201,17 +201,29 @@ function Protocol.createEntityState(entity)
             -- Add vertices for shape synchronization (clamped to Box2D 8-vertex limit)
             if entity.render.vertices then
                 local verts = entity.render.vertices
+                print("[SERVER] Asteroid " ..
+                tostring(entity.network_id) .. " has vertices table with " .. tostring(#verts) .. " coords")
                 if type(verts) == "table" and #verts >= 6 and (#verts % 2 == 0) then
                     local maxCoords = 8 * 2 -- Box2D maximum: 8 vertices => 16 coordinates
-                    if #verts > maxCoords then
-                        local truncated = {}
-                        for i = 1, maxCoords do
-                            truncated[i] = verts[i]
+                    local count = #verts
+                    if count > maxCoords then count = maxCoords end
+
+                    -- Serialize to string to bypass any table serialization issues
+                    local v_str = ""
+                    for i = 1, count do
+                        v_str = v_str .. string.format("%.2f", verts[i])
+                        if i < count then
+                            v_str = v_str .. ","
                         end
-                        verts = truncated
                     end
-                    state.vertices = verts
+                    state.vertices_str = v_str
+                    print("[SERVER] Serialized vertices_str: " .. v_str:sub(1, 50) .. "...")
+                else
+                    print("PROTOCOL WARNING: Asteroid " ..
+                    tostring(entity.network_id) .. " has invalid vertices: " .. tostring(verts))
                 end
+            else
+                print("[SERVER] Asteroid " .. tostring(entity.network_id) .. " MISSING render.vertices!")
             end
 
             -- Add generation seed if available (for deterministic generation)
@@ -231,11 +243,6 @@ function Protocol.createEntityState(entity)
             state.thickness = entity.render.thickness
             state.shape = entity.render.shape
         end
-    end
-
-    if state.type == "asteroid" and state.vertices and not debugPrintedAsteroids[state.id] then
-        print("NET ASTEROID HOST id=" .. tostring(state.id) .. " verts=" .. table.concat(state.vertices, ","))
-        debugPrintedAsteroids[state.id] = true
     end
 
     -- Add damage and owner for projectiles

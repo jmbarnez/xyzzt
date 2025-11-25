@@ -5,7 +5,12 @@ return {
     ROTATION_SPEED = 4,
     LINEAR_DAMPING = 2.5,
     LERP_FACTOR = 10.0,
-    RECONCILE_SNAP_DISTANCE = 150,
+
+    -- Network Reconciliation Thresholds (pixels)
+    RECONCILE_SNAP_DISTANCE = 75, -- Local player ship (lowered from 150)
+    RECONCILE_REMOTE_SHIP = 100,  -- Remote player ships
+    RECONCILE_ASTEROID = 50,      -- Asteroids and chunks
+    RECONCILE_PROJECTILE = 25,    -- Projectiles
 
     -- Infinite Universe Config
     SECTOR_SIZE = 10000, -- The width/height of one "Sector" before coordinates wrap
