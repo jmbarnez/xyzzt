@@ -59,15 +59,8 @@ function Client.update(dt)
 
     Client.tick = Client.tick + 1
 
-    -- Process network events (guard against ENet service errors)
-    local ok, event = pcall(function()
-        return Client.host:service(0) -- Non-blocking
-    end)
-
-    if not ok then
-        print("Client: ENet service error: " .. tostring(event))
-        return
-    end
+    -- Process network events
+    local event = Client.host:service(0) -- Non-blocking
 
     while event do
         if event.type == "connect" then
@@ -78,14 +71,7 @@ function Client.update(dt)
             Client.onDisconnect(event.peer)
         end
 
-        ok, event = pcall(function()
-            return Client.host:service(0)
-        end)
-
-        if not ok then
-            print("Client: ENet service error: " .. tostring(event))
-            break
-        end
+        event = Client.host:service(0)
     end
 end
 
