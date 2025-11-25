@@ -94,7 +94,8 @@ function Server.update(dt)
 
         -- Broadcast world state
         local entities = Server.getWorldState()
-        local packet = Protocol.createWorldStatePacket(Server.tick, entities)
+        local server_time = love.timer.getTime()
+        local packet = Protocol.createWorldStatePacket(Server.tick, entities, server_time)
         Server.broadcast(packet)
 
         Server.accumulator = Server.accumulator - Protocol.TICK_INTERVAL

@@ -164,24 +164,25 @@ function PlayState:enter(prev, param)
                         local dx = entity.transform.x - state.x
                         local dy = entity.transform.y - state.y
                         local dist_sq = dx * dx + dy * dy
-                        local threshold = 50 * 50 -- 50 pixel threshold for reconciliation
+                        local threshold = 25 * 25 -- Reduced from 50 to 25 pixels for tighter sync
 
                         if dist_sq > threshold then
-                            -- Smooth reconciliation (Lerp)
-                            -- Instead of snapping instantly, move 20% closer each frame
-                            -- This creates a "rubber band" effect that is less jarring
-                            local smooth_factor = 0.2
-                            
+                            -- Adaptive smooth reconciliation
+                            -- Smooth factor increases with distance for faster correction of large errors
+                            -- but stays gentle for small discrepancies
+                            local distance = math.sqrt(dist_sq)
+                            local smooth_factor = math.min(0.5, 0.1 + (distance / 200))
+
                             local new_x = entity.transform.x + (state.x - entity.transform.x) * smooth_factor
                             local new_y = entity.transform.y + (state.y - entity.transform.y) * smooth_factor
-                            
+
                             entity.transform.x = new_x
                             entity.transform.y = new_y
-                            
+
                             -- Also update physics body smoothly
                             if entity.physics and entity.physics.body and not entity.physics.body:isDestroyed() then
                                 entity.physics.body:setPosition(new_x, new_y)
-                                
+
                                 -- Blend velocity to prevent "fighting" the correction
                                 if state.vx and state.vy then
                                     local vx, vy = entity.physics.body:getLinearVelocity()
@@ -265,7 +266,7 @@ function PlayState:enter(prev, param)
                         end
                     end
                 elseif state.type == "asteroid" then
-                    -- Spawn remote asteroid
+                    -- Spawn remote asteroid with deterministic seed
                     local asteroid = Asteroids.spawn_single(
                         self.world,
                         state.sx,
@@ -274,7 +275,8 @@ function PlayState:enter(prev, param)
                         state.y,
                         state.radius or 30,
                         state.color or { 0.6, 0.6, 0.6, 1 },
-                        state.id
+                        state.id,
+                        state.seed -- Pass seed for deterministic shape generation
                     )
 
                     if asteroid then
@@ -285,6 +287,10 @@ function PlayState:enter(prev, param)
                             asteroid.physics.body:setAngle(state.r)
                             if state.vx and state.vy then
                                 asteroid.physics.body:setLinearVelocity(state.vx, state.vy)
+                            end
+                            -- Apply angular velocity for rotation sync
+                            if state.angular_velocity then
+                                asteroid.physics.body:setAngularVelocity(state.angular_velocity)
                             end
                         end
                         if asteroid.hp and state.hp_current then

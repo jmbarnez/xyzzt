@@ -120,7 +120,9 @@ Concord.component("hp", function(c, max, current)
     c.last_hit_time = nil
 end)
 
-Concord.component("asteroid")
+Concord.component("asteroid", function(c, seed)
+    c.seed = seed -- Store generation seed for network sync
+end)
 
 Concord.component("asteroid_composition", function(c, composition)
     c.map = composition or {}

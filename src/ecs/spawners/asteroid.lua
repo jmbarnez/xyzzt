@@ -87,15 +87,23 @@ local function jitter_color(base, rng)
     }
 end
 
-local function spawn_single(world, sector_x, sector_y, x, y, radius, color, network_id)
+local function spawn_single(world, sector_x, sector_y, x, y, radius, color, network_id, seed)
     local body = love.physics.newBody(world.physics_world, x, y, "dynamic")
     body:setLinearDamping(Config.LINEAR_DAMPING * 2)
     body:setAngularDamping(Config.LINEAR_DAMPING * 2)
 
     local vertices = {}
 
+    -- Use seed-based RNG if provided, otherwise use global random
+    local rng
+    if seed then
+        rng = love.math.newRandomGenerator(seed)
+    end
+
     local function rnd()
-        if love and love.math and love.math.random then
+        if rng then
+            return rng:random()
+        elseif love and love.math and love.math.random then
             return love.math.random()
         else
             return math.random()
@@ -123,7 +131,7 @@ local function spawn_single(world, sector_x, sector_y, x, y, radius, color, netw
     asteroid:give("render", { render_type = "asteroid", color = c, radius = radius, vertices = vertices })
     local hp_max = math.floor((radius or 30) * 1.5)
     asteroid:give("hp", hp_max)
-    asteroid:give("asteroid")
+    asteroid:give("asteroid", seed) -- Pass seed to asteroid component
 
     -- Assign network_id if provided (for server-authoritative spawning)
     if network_id then
@@ -199,6 +207,10 @@ function Asteroids.spawnField(world, sector_x, sector_y, seed, count)
         local base_color = mix_resource_colors(at and at.composition)
         local color = jitter_color(base_color, rng)
 
+        -- Generate deterministic seed for this specific asteroid
+        -- Combines sector coords, asteroid index, and universe seed for uniqueness
+        local asteroid_seed = use_seed + (sector_x or 0) * 1000000 + (sector_y or 0) * 10000 + i
+
         -- Assign network_id if we're on the server/host
         local network_id = nil
         if assign_network_ids and Server then
@@ -206,7 +218,7 @@ function Asteroids.spawnField(world, sector_x, sector_y, seed, count)
             Server.next_network_id = Server.next_network_id + 1
         end
 
-        local asteroid = spawn_single(world, sector_x or 0, sector_y or 0, x, y, radius, color, network_id)
+        local asteroid = spawn_single(world, sector_x or 0, sector_y or 0, x, y, radius, color, network_id, asteroid_seed)
         if asteroid and at then
             asteroid:give("asteroid_composition", at.composition)
             if not asteroid.name then

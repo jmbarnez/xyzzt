@@ -90,12 +90,14 @@ end
 --- Create a WORLD_STATE packet (Server -> Client)
 --- @param tick number Server tick number
 --- @param entities table Array of entity states
+--- @param server_time number Server timestamp (optional, defaults to love.timer.getTime())
 --- @return table packet
-function Protocol.createWorldStatePacket(tick, entities)
+function Protocol.createWorldStatePacket(tick, entities, server_time)
     return {
         type = Protocol.PacketType.WORLD_STATE,
         tick = tick,
-        entities = entities or {}
+        entities = entities or {},
+        server_time = server_time or (love.timer and love.timer.getTime() or 0)
     }
 end
 
@@ -164,6 +166,12 @@ function Protocol.createEntityState(entity)
         local vx, vy = entity.physics.body:getLinearVelocity()
         state.vx = vx
         state.vy = vy
+
+        -- Add angular velocity for rotating entities (asteroids)
+        local angular_vel = entity.physics.body:getAngularVelocity()
+        if angular_vel and angular_vel ~= 0 then
+            state.angular_velocity = angular_vel
+        end
     end
 
     -- Add entity type tag
@@ -188,6 +196,16 @@ function Protocol.createEntityState(entity)
         if state.type == "asteroid" then
             state.radius = entity.render.radius
             state.color = entity.render.color
+
+            -- Add vertices for shape synchronization
+            if entity.render.vertices then
+                state.vertices = entity.render.vertices
+            end
+
+            -- Add generation seed if available (for deterministic generation)
+            if entity.asteroid and entity.asteroid.seed then
+                state.seed = entity.asteroid.seed
+            end
         elseif state.type == "projectile" then
             state.radius = entity.render.radius
             state.color = entity.render.color
