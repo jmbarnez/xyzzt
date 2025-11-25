@@ -216,7 +216,16 @@ function Server.onClientReceive(peer, data)
         print("Server: Chat from player " .. client.player_id .. ": " .. packet.message)
         local broadcast = Protocol.createChatBroadcastPacket(client.player_id, packet.message)
         Server.broadcast(broadcast)
+
+        -- Notify Host (if callback set)
+        if Server.onChatReceived then
+            Server.onChatReceived(client.player_id, packet.message)
+        end
     end
+end
+
+function Server.setChatCallback(fn)
+    Server.onChatReceived = fn
 end
 
 function Server.onClientDisconnect(peer)
@@ -243,14 +252,64 @@ function Server.onClientDisconnect(peer)
 end
 
 -- Get world state snapshot for network transmission
+-- Get world state snapshot for network transmission
 function Server.getWorldState()
     local entities = {}
 
+    -- Network culling: only send entities within range of players
+    local NETWORK_RANGE = 2000 -- Only sync entities within 2000 units
+
+    -- Get all player positions for culling
+    local player_positions = {}
+    for _, player_data in pairs(Server.players) do
+        if player_data.entity and player_data.entity.transform then
+            table.insert(player_positions, {
+                x = player_data.entity.transform.x,
+                y = player_data.entity.transform.y
+            })
+        end
+    end
+
+    -- Helper function to check if entity is near any player
+    local function isNearAnyPlayer(entity)
+        if not entity.transform then
+            return false
+        end
+
+        for _, player_pos in ipairs(player_positions) do
+            local dx = entity.transform.x - player_pos.x
+            local dy = entity.transform.y - player_pos.y
+            local dist_sq = dx * dx + dy * dy
+
+            if dist_sq <= NETWORK_RANGE * NETWORK_RANGE then
+                return true
+            end
+        end
+
+        return false
+    end
+
     -- Gather all networkable entities in the host's world
     for _, entity in ipairs(Server.world:getEntities()) do
-        local state = Protocol.createEntityState(entity)
-        if state then
-            table.insert(entities, state)
+        -- Always include player ships, cull other entities by distance
+        local should_include = false
+
+        if entity.vehicle then
+            -- Always include player ships
+            should_include = true
+        elseif entity.projectile then
+            -- Always include projectiles (they're fast-moving and important)
+            should_include = true
+        else
+            -- For asteroids and other entities, use distance culling
+            should_include = isNearAnyPlayer(entity)
+        end
+
+        if should_include and entity.network_id then
+            local state = Protocol.createEntityState(entity)
+            if state then
+                table.insert(entities, state)
+            end
         end
     end
 

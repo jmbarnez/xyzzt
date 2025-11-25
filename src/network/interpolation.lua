@@ -1,17 +1,17 @@
 -- src/network/interpolation.lua
--- Interpolation buffer system for smooth remote entity rendering
-
 local Interpolation = {}
 
--- Configuration
-local BUFFER_SIZE = 3           -- Store last 3 states
-local INTERPOLATION_DELAY = 0.1 -- 100ms behind server time for smooth interpolation
+-- Maximum number of historical states to keep per entity
+local BUFFER_SIZE = 32
 
--- Create interpolation buffer for an entity
+-- How far behind real time (in seconds) the render interpolation should be
+local INTERPOLATION_DELAY = 0.1
+
+-- Create a new interpolation buffer
 function Interpolation.createBuffer()
     return {
-        states = {}, -- Array of {time, x, y, r, vx, vy, angular_velocity}
-        last_update = 0
+        states = {},
+        last_update = love.timer.getTime(),
     }
 end
 

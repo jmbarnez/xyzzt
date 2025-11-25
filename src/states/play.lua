@@ -1,14 +1,15 @@
-local Gamestate   = require "lib.hump.gamestate"
-local baton       = require "lib.baton"
-local Camera      = require "lib.hump.camera"
-local Concord     = require "lib.concord.concord"
-local Config      = require "src.config"
-local Background  = require "src.rendering.background"
-local HUD         = require "src.ui.hud.hud"
-local Chat        = require "src.ui.hud.chat"
-local SaveManager = require "src.managers.save_manager"
-local Window      = require "src.ui.hud.window"
-local CargoPanel  = require "src.ui.hud.cargo_panel"
+local Gamestate     = require "lib.hump.gamestate"
+local baton         = require "lib.baton"
+local Camera        = require "lib.hump.camera"
+local Concord       = require "lib.concord.concord"
+local Config        = require "src.config"
+local Background    = require "src.rendering.background"
+local HUD           = require "src.ui.hud.hud"
+local Chat          = require "src.ui.hud.chat"
+local SaveManager   = require "src.managers.save_manager"
+local Window        = require "src.ui.hud.window"
+local CargoPanel    = require "src.ui.hud.cargo_panel"
+local Interpolation = require "src.network.interpolation"
 
 require "src.ecs.components"
 
@@ -139,7 +140,8 @@ function PlayState:enter(prev, param)
     end
 
     -- Track networked entities by network_id
-    self.world.networked_entities = {} -- Map of network_id -> entity
+    self.world.networked_entities = {}    -- Map of network_id -> entity
+    self.world.interpolation_buffers = {} -- Map of network_id -> interpolation buffer
 
     -- Set up network callbacks
     Client.setWorldStateCallback(function(packet)
@@ -194,22 +196,47 @@ function PlayState:enter(prev, param)
                         end
                     end
                 else
-                    -- For REMOTE ships: always update everything
-                    if entity.transform then
-                        entity.transform.x = state.x
-                        entity.transform.y = state.y
-                        entity.transform.r = state.r
+                    -- For REMOTE ships and asteroids: use interpolation
+                    -- Add state to interpolation buffer
+                    local buffer = self.world.interpolation_buffers[state.id]
+                    if not buffer then
+                        buffer = Interpolation.createBuffer()
+                        self.world.interpolation_buffers[state.id] = buffer
                     end
-                    if entity.sector then
-                        entity.sector.x = state.sx
-                        entity.sector.y = state.sy
-                    end
-                    if entity.physics and entity.physics.body and not entity.physics.body:isDestroyed() then
-                        -- Update rotation on physics body
-                        entity.physics.body:setAngle(state.r)
-                        -- Update velocity
-                        if state.vx and state.vy then
-                            entity.physics.body:setLinearVelocity(state.vx, state.vy)
+
+                    -- Add this state to the buffer
+                    Interpolation.addState(
+                        buffer,
+                        packet.server_time or love.timer.getTime(),
+                        state.x,
+                        state.y,
+                        state.r,
+                        state.vx,
+                        state.vy,
+                        state.angular_velocity
+                    )
+
+                    -- Get interpolated state and apply it
+                    local interp_state = Interpolation.getInterpolatedState(buffer)
+                    if interp_state then
+                        if entity.transform then
+                            entity.transform.x = interp_state.x
+                            entity.transform.y = interp_state.y
+                            entity.transform.r = interp_state.r
+                        end
+                        if entity.sector then
+                            entity.sector.x = state.sx
+                            entity.sector.y = state.sy
+                        end
+                        if entity.physics and entity.physics.body and not entity.physics.body:isDestroyed() then
+                            entity.physics.body:setPosition(interp_state.x, interp_state.y)
+                            entity.physics.body:setAngle(interp_state.r)
+                            if interp_state.vx and interp_state.vy then
+                                entity.physics.body:setLinearVelocity(interp_state.vx, interp_state.vy)
+                            end
+                            if interp_state.angular_velocity then
+                                entity.physics.body:setAngularVelocity(interp_state.angular_velocity)
+                            end
                         end
                     end
                 end

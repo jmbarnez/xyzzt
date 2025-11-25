@@ -130,19 +130,6 @@ local function spawn_single(world, sector_x, sector_y, x, y, radius, color, netw
     end
 
     local asteroid = Concord.entity(world)
-    asteroid:give("transform", x, y, initial_rotation)
-    asteroid:give("sector", sector_x or 0, sector_y or 0)
-    asteroid:give("physics", body, shape, fixture)
-
-    -- Set initial rotation on physics body
-    body:setAngle(initial_rotation)
-    local c = color or { 0.6, 0.6, 0.6, 1 }
-    asteroid:give("render", { render_type = "asteroid", color = c, radius = radius, vertices = vertices })
-    local hp_max = math.floor((radius or 30) * 1.5)
-    asteroid:give("hp", hp_max)
-    asteroid:give("asteroid", seed) -- Pass seed to asteroid component
-
-    -- Assign network_id if provided (for server-authoritative spawning)
     if network_id then
         asteroid.network_id = network_id
     end
