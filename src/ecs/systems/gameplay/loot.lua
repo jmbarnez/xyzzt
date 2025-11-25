@@ -1,12 +1,19 @@
 local Concord = require "lib.concord.concord"
 local AsteroidChunkSpawner = require "src.ecs.spawners.asteroid_chunk"
 local ItemSpawners = require "src.ecs.spawners.item"
+local Client = require "src.network.client"
 
 local LootSystem = Concord.system({})
 
 function LootSystem:entity_died(entity)
     local world = self:getWorld()
     if not world then return end
+
+    -- Pure network clients (joined games) should not spawn loot/chunks; the host/server is authoritative.
+    local is_pure_client = (world and not world.hosting and Client.connected)
+    if is_pure_client then
+        return
+    end
 
     local t = entity.transform
     local s = entity.sector

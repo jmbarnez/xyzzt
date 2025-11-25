@@ -193,7 +193,7 @@ function Protocol.createEntityState(entity)
 
     -- Add rendering properties for asteroids and projectiles
     if entity.render then
-        if state.type == "asteroid" then
+        if state.type == "asteroid" or state.type == "asteroid_chunk" then
             state.radius = entity.render.radius
             state.color = entity.render.color
 
@@ -203,8 +203,14 @@ function Protocol.createEntityState(entity)
             end
 
             -- Add generation seed if available (for deterministic generation)
-            if entity.asteroid and entity.asteroid.seed then
-                state.seed = entity.asteroid.seed
+            if state.type == "asteroid" then
+                if entity.asteroid and entity.asteroid.seed then
+                    state.seed = entity.asteroid.seed
+                end
+            elseif state.type == "asteroid_chunk" then
+                if entity.render.seed then
+                    state.seed = entity.render.seed
+                end
             end
         elseif state.type == "projectile" then
             state.radius = entity.render.radius

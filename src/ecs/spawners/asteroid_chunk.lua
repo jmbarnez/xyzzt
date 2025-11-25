@@ -20,6 +20,14 @@ function AsteroidChunkSpawner.spawn(world, parent_entity, num_chunks)
 
     if not (transform and sector and render) then return end
 
+    -- Check if we need to assign network IDs (server/host mode)
+    local Server = nil
+    local assign_network_ids = false
+    if world.hosting then
+        Server = require "src.network.server"
+        assign_network_ids = true
+    end
+
     local parent_radius = render.radius or 10
     local parent_color = render.color or { 0.6, 0.6, 0.6, 1 }
 
@@ -31,22 +39,15 @@ function AsteroidChunkSpawner.spawn(world, parent_entity, num_chunks)
         composition_map = { stone = 1.0 }
     end
 
-    -- Always spawn 2-3 chunks
-    if not num_chunks then
-        num_chunks = 2 + math.random(0, 1) -- 2-3 chunks
-    end
-
-    -- Calculate max chunk radius to conserve mass
-    -- In 2D: total area of chunks ≤ parent area
-    -- Area = π*r², so for N equal chunks: N * π*rchunk² ≤ π*rparent²
-    -- Therefore: rchunk ≤ rparent / sqrt(N)
-    local base_chunk_radius = parent_radius / math.sqrt(num_chunks)
-
     -- Create seeded RNG for deterministic variation
-    -- Inherit seed from parent if available to keep texture consistent
+    -- Prefer asteroid component seed (network-synced) when available
     local seed = 0
-    if render.seed then
+    if parent_entity.asteroid and type(parent_entity.asteroid.seed) == "number" then
+        seed = parent_entity.asteroid.seed
+    elseif render.seed and type(render.seed) == "number" then
         seed = render.seed
+    elseif parent_entity.network_id and type(parent_entity.network_id) == "number" then
+        seed = parent_entity.network_id
     else
         local entity_key = tostring(parent_entity)
         for i = 1, #entity_key do
@@ -54,6 +55,17 @@ function AsteroidChunkSpawner.spawn(world, parent_entity, num_chunks)
         end
     end
     local rng = love.math.newRandomGenerator(seed)
+
+    -- Always spawn 2-3 chunks
+    if not num_chunks then
+        num_chunks = rng:random(2, 3) -- 2-3 chunks (deterministic)
+    end
+
+    -- Calculate max chunk radius to conserve mass
+    -- In 2D: total area of chunks ≤ parent area
+    -- Area = π*r², so for N equal chunks: N * π*rchunk² ≤ π*rparent²
+    -- Therefore: rchunk ≤ rparent / sqrt(N)
+    local base_chunk_radius = parent_radius / math.sqrt(num_chunks)
 
     local function choose_resource_type()
         local total = 0
@@ -132,7 +144,7 @@ function AsteroidChunkSpawner.spawn(world, parent_entity, num_chunks)
             local chunk_radius = raw_chunk_radius
 
             -- Generate random convex polygon for chunk (4-6 vertices)
-            local vertex_count = math.random(4, 6)
+            local vertex_count = rng:random(4, 6)
             local vertices = {}
             for v = 1, vertex_count do
                 local v_angle = (v / vertex_count) * math.pi * 2 + (rng:random() - 0.5) * 0.5
@@ -179,6 +191,12 @@ function AsteroidChunkSpawner.spawn(world, parent_entity, num_chunks)
             chunk_fixture:setUserData(chunk)
 
             chunk:give("physics", chunk_body, chunk_shape, chunk_fixture)
+
+            -- Assign a unique network ID for network synchronization (host/server only)
+            if assign_network_ids and Server then
+                chunk.network_id = Server.next_network_id
+                Server.next_network_id = Server.next_network_id + 1
+            end
 
             -- Velocity varies by size (smaller chunks move faster)
             local base_speed = 80 + rng:random() * 120             -- 80-200 units/sec

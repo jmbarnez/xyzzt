@@ -372,6 +372,48 @@ function PlayState:enter(prev, param)
                         end
                         self.world.networked_entities[state.id] = asteroid
                     end
+                elseif state.type == "asteroid_chunk" then
+                    -- Spawn remote asteroid chunk using server-sent shape/seed
+                    local chunk = Concord.entity(self.world)
+                    chunk.network_id = state.id
+
+                    chunk:give("transform", state.x, state.y, state.r or 0)
+                    chunk:give("sector", state.sx, state.sy)
+
+                    chunk:give("render", {
+                        render_type = "asteroid_chunk",
+                        color = state.color or { 0.7, 0.7, 0.7, 1 },
+                        radius = state.radius or 10,
+                        vertices = state.vertices,
+                        seed = state.seed,
+                    })
+                    chunk:give("asteroid_chunk")
+
+                    if state.hp_max or state.hp_current then
+                        chunk:give("hp", state.hp_max or state.hp_current or 10, state.hp_current or state.hp_max or 10)
+                    end
+
+                    if self.world.physics_world and state.vertices then
+                        local body = love.physics.newBody(self.world.physics_world, state.x, state.y, "dynamic")
+                        body:setLinearDamping(1.0)
+                        body:setAngularDamping(1.0)
+
+                        local shape = love.physics.newPolygonShape(state.vertices)
+                        local fixture = love.physics.newFixture(body, shape, 0.5)
+                        fixture:setRestitution(0.2)
+                        fixture:setUserData(chunk)
+
+                        chunk:give("physics", body, shape, fixture)
+
+                        if state.vx and state.vy then
+                            body:setLinearVelocity(state.vx, state.vy)
+                        end
+                        if state.angular_velocity then
+                            body:setAngularVelocity(state.angular_velocity)
+                        end
+                    end
+
+                    self.world.networked_entities[state.id] = chunk
                 elseif state.type == "projectile" then
                     local is_my_projectile = (self.my_entity_id and state.owner_id == self.my_entity_id)
 
@@ -690,10 +732,10 @@ function PlayState:keypressed(key)
                 print("Host ship assigned network_id=" .. self.world.local_ship.network_id)
             end
 
-            -- Retroactively assign network IDs to all existing asteroids and projectiles
-            -- This is CRITICAL: Asteroids spawned at game start (before hosting) need IDs to be synced!
+            -- Retroactively assign network IDs to all existing asteroids, asteroid chunks, and projectiles
+            -- This is CRITICAL: entities spawned at game start (before hosting) need IDs to be synced!
             for _, e in ipairs(self.world:getEntities()) do
-                if (e.asteroid or e.projectile) and not e.network_id then
+                if (e.asteroid or e.asteroid_chunk or e.projectile) and not e.network_id then
                     e.network_id = Server.next_network_id
                     Server.next_network_id = Server.next_network_id + 1
                 end

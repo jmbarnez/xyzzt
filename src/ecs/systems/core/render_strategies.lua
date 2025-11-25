@@ -167,10 +167,20 @@ function RenderStrategies.asteroid(e)
     -- Apply shader if available
     if asteroidShader then
         love.graphics.setShader(asteroidShader)
-        -- Send unique seed for this asteroid to make texture stable
-        local seedVal = hashString(key)
 
-        -- Store seed in render component for chunks to inherit
+        -- Use a deterministic, network-synced seed for the asteroid texture
+        -- Prefer render.seed (may be propagated to chunks), then asteroid.seed,
+        -- and finally fall back to a hash of the entity key.
+        local seedVal
+        if type(r) == "table" and r.seed then
+            seedVal = r.seed
+        elseif e.asteroid and e.asteroid.seed then
+            seedVal = e.asteroid.seed
+        else
+            seedVal = hashString(key)
+        end
+
+        -- Store seed in render component so chunks or other systems can inherit it
         if type(r) == "table" and not r.seed then
             r.seed = seedVal
         end

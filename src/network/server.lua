@@ -127,7 +127,18 @@ function Server.processEvents()
             Server.onClientDisconnect(event.peer)
         end
 
-        event = Server.host:service(0)
+        if not Server.host then
+            return
+        end
+
+        ok, event = pcall(function()
+            return Server.host:service(0)
+        end)
+
+        if not ok then
+            print("Server: ENet service error: " .. tostring(event))
+            return
+        end
     end
 end
 
