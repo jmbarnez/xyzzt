@@ -77,8 +77,10 @@ function RenderStrategies.asteroid(e)
                     end
                 end
 
-                local vertex_count = 8 + math.floor(rnd() * 5)
+                -- Match physics generator: 5–8 vertices max to satisfy Box2D limits
+                local vertex_count = 5 + math.floor(rnd() * 4) -- 5–8 vertices
                 if vertex_count < 5 then vertex_count = 5 end
+                if vertex_count > 8 then vertex_count = 8 end
 
                 for i = 1, vertex_count do
                     local angle = (i / vertex_count) * math.pi * 2 + (rnd() - 0.5) * 0.4

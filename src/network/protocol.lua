@@ -197,9 +197,20 @@ function Protocol.createEntityState(entity)
             state.radius = entity.render.radius
             state.color = entity.render.color
 
-            -- Add vertices for shape synchronization
+            -- Add vertices for shape synchronization (clamped to Box2D 8-vertex limit)
             if entity.render.vertices then
-                state.vertices = entity.render.vertices
+                local verts = entity.render.vertices
+                if type(verts) == "table" and #verts >= 6 and (#verts % 2 == 0) then
+                    local maxCoords = 8 * 2 -- Box2D maximum: 8 vertices => 16 coordinates
+                    if #verts > maxCoords then
+                        local truncated = {}
+                        for i = 1, maxCoords do
+                            truncated[i] = verts[i]
+                        end
+                        verts = truncated
+                    end
+                    state.vertices = verts
+                end
             end
 
             -- Add generation seed if available (for deterministic generation)

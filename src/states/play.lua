@@ -340,38 +340,74 @@ function PlayState:enter(prev, param)
                         end
                     end
                 elseif state.type == "asteroid" then
-                    -- Spawn remote asteroid with deterministic seed
-                    local asteroid = Asteroids.spawn_single(
-                        self.world,
-                        state.sx,
-                        state.sy,
-                        state.x,
-                        state.y,
-                        state.radius or 30,
-                        state.color or { 0.6, 0.6, 0.6, 1 },
-                        state.id,
-                        state.seed -- Pass seed for deterministic shape generation
-                    )
+                    -- Spawn remote asteroid using server-authoritative geometry (vertices)
+                    local asteroid = Concord.entity(self.world)
+                    asteroid.network_id = state.id
 
-                    if asteroid then
-                        if asteroid.transform then
-                            asteroid.transform.r = state.r
-                        end
-                        if asteroid.physics and asteroid.physics.body then
-                            asteroid.physics.body:setAngle(state.r)
-                            if state.vx and state.vy then
-                                asteroid.physics.body:setLinearVelocity(state.vx, state.vy)
-                            end
-                            -- Apply angular velocity for rotation sync
-                            if state.angular_velocity then
-                                asteroid.physics.body:setAngularVelocity(state.angular_velocity)
-                            end
-                        end
-                        if asteroid.hp and state.hp_current then
-                            asteroid.hp.current = state.hp_current
-                        end
-                        self.world.networked_entities[state.id] = asteroid
+                    asteroid:give("transform", state.x, state.y, state.r or 0)
+                    asteroid:give("sector", state.sx, state.sy)
+
+                    asteroid:give("render", {
+                        type = "asteroid",
+                        color = state.color or { 0.6, 0.6, 0.6, 1 },
+                        radius = state.radius or 30,
+                        vertices = state.vertices,
+                        seed = state.seed,
+                    })
+
+                    -- Store asteroid seed for any systems that rely on it
+                    if state.seed then
+                        asteroid:give("asteroid", state.seed)
+                    else
+                        asteroid:give("asteroid")
                     end
+
+                    if state.hp_max or state.hp_current then
+                        local hp_max = state.hp_max or state.hp_current or 60
+                        local hp_current = state.hp_current or state.hp_max or hp_max
+                        asteroid:give("hp", hp_max, hp_current)
+                    end
+
+                    -- Physics body using server-provided polygon (clamped to Box2D 8-vertex limit)
+                    if self.world.physics_world then
+                        local body = love.physics.newBody(self.world.physics_world, state.x, state.y, "dynamic")
+                        body:setLinearDamping(Config.LINEAR_DAMPING * 2)
+                        body:setAngularDamping(Config.LINEAR_DAMPING * 2)
+
+                        local shape
+                        local verts = state.vertices
+                        if type(verts) == "table" and #verts >= 6 and (#verts % 2 == 0) then
+                            -- Box2D supports a maximum of 8 vertices per polygon
+                            local maxCoords = 8 * 2
+                            if #verts > maxCoords then
+                                local truncated = {}
+                                for i = 1, maxCoords do
+                                    truncated[i] = verts[i]
+                                end
+                                verts = truncated
+                            end
+                            shape = love.physics.newPolygonShape(verts)
+                        else
+                            -- Fallback: simple circle if vertices are missing or invalid
+                            shape = love.physics.newCircleShape(state.radius or 30)
+                        end
+
+                        local fixture = love.physics.newFixture(body, shape, 1.0)
+                        fixture:setRestitution(0.1)
+                        fixture:setUserData(asteroid)
+
+                        asteroid:give("physics", body, shape, fixture)
+
+                        body:setAngle(state.r or 0)
+                        if state.vx and state.vy then
+                            body:setLinearVelocity(state.vx, state.vy)
+                        end
+                        if state.angular_velocity then
+                            body:setAngularVelocity(state.angular_velocity)
+                        end
+                    end
+
+                    self.world.networked_entities[state.id] = asteroid
                 elseif state.type == "asteroid_chunk" then
                     -- Spawn remote asteroid chunk using server-sent shape/seed
                     local chunk = Concord.entity(self.world)
@@ -398,7 +434,22 @@ function PlayState:enter(prev, param)
                         body:setLinearDamping(1.0)
                         body:setAngularDamping(1.0)
 
-                        local shape = love.physics.newPolygonShape(state.vertices)
+                        local verts = state.vertices
+                        local shape
+                        if type(verts) == "table" and #verts >= 6 and (#verts % 2 == 0) then
+                            -- Clamp chunk polygons to Box2D 8-vertex limit as well
+                            local maxCoords = 8 * 2
+                            if #verts > maxCoords then
+                                local truncated = {}
+                                for i = 1, maxCoords do
+                                    truncated[i] = verts[i]
+                                end
+                                verts = truncated
+                            end
+                            shape = love.physics.newPolygonShape(verts)
+                        else
+                            shape = love.physics.newCircleShape(state.radius or 8)
+                        end
                         local fixture = love.physics.newFixture(body, shape, 0.5)
                         fixture:setRestitution(0.2)
                         fixture:setUserData(chunk)
