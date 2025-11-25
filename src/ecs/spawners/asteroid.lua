@@ -123,10 +123,19 @@ local function spawn_single(world, sector_x, sector_y, x, y, radius, color, netw
     local fixture = love.physics.newFixture(body, shape, 1.0)
     fixture:setRestitution(0.1)
 
+    -- Deterministic initial rotation (no spin)
+    local initial_rotation = 0
+    if rng then
+        initial_rotation = rng:random() * math.pi * 2 -- Random angle 0-2π
+    end
+
     local asteroid = Concord.entity(world)
-    asteroid:give("transform", x, y, 0)
+    asteroid:give("transform", x, y, initial_rotation)
     asteroid:give("sector", sector_x or 0, sector_y or 0)
     asteroid:give("physics", body, shape, fixture)
+
+    -- Set initial rotation on physics body
+    body:setAngle(initial_rotation)
     local c = color or { 0.6, 0.6, 0.6, 1 }
     asteroid:give("render", { render_type = "asteroid", color = c, radius = radius, vertices = vertices })
     local hp_max = math.floor((radius or 30) * 1.5)
