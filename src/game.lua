@@ -16,6 +16,11 @@ if not love.filesystem.isFused() then
     end
 end
 
+-- Fixed timestep physics for deterministic multiplayer synchronization
+local PHYSICS_TIMESTEP = 1 / 60 -- Physics always runs at 60 Hz, regardless of FPS
+local physics_accumulator = 0
+local MAX_PHYSICS_STEPS = 5   -- Prevent spiral of death if game lags
+
 function love.load()
     -- Initialize game and load plugins
     WeaponRegistry.load_plugins()
@@ -29,7 +34,22 @@ function love.update(dt)
     if Lurker then
         Lurker.update(dt)
     end
-    Gamestate.update(dt)
+
+    -- Fixed timestep physics: accumulate time and run physics in fixed increments
+    physics_accumulator = physics_accumulator + dt
+
+    local steps = 0
+    while physics_accumulator >= PHYSICS_TIMESTEP and steps < MAX_PHYSICS_STEPS do
+        -- Run gamestate update with FIXED timestep for deterministic physics
+        Gamestate.update(PHYSICS_TIMESTEP)
+        physics_accumulator = physics_accumulator - PHYSICS_TIMESTEP
+        steps = steps + 1
+    end
+
+    -- If we hit max steps, discard remaining time to prevent spiral of death
+    if steps >= MAX_PHYSICS_STEPS then
+        physics_accumulator = 0
+    end
 end
 
 function love.draw()

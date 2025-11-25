@@ -53,6 +53,19 @@ function ItemSpawners.spawn_item(world, item_id, x, y, sector_x, sector_y, volum
     -- No shape or fixture for items anymore
     item:give("physics", body, nil, nil)
 
+    -- Assign network ID if hosting (same pattern as asteroids/chunks)
+    local Server = nil
+    local assign_network_ids = false
+    if world.hosting then
+        Server = require "src.network.server"
+        assign_network_ids = true
+    end
+
+    if assign_network_ids and Server then
+        item.network_id = Server.next_network_id
+        Server.next_network_id = Server.next_network_id + 1
+    end
+
     -- Apply random velocity
     local vel = phys.spawn_velocity
     local angle = math.random() * math.pi * 2

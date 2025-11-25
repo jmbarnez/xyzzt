@@ -184,6 +184,8 @@ function Protocol.createEntityState(entity)
         state.type = "asteroid_chunk"
     elseif entity.projectile then
         state.type = "projectile"
+    elseif entity.item then
+        state.type = "item"
     end
 
     -- Add HP if exists
@@ -202,7 +204,7 @@ function Protocol.createEntityState(entity)
             if entity.render.vertices then
                 local verts = entity.render.vertices
                 print("[SERVER] Asteroid " ..
-                tostring(entity.network_id) .. " has vertices table with " .. tostring(#verts) .. " coords")
+                    tostring(entity.network_id) .. " has vertices table with " .. tostring(#verts) .. " coords")
                 if type(verts) == "table" and #verts >= 6 and (#verts % 2 == 0) then
                     local maxCoords = 8 * 2 -- Box2D maximum: 8 vertices => 16 coordinates
                     local count = #verts
@@ -220,7 +222,7 @@ function Protocol.createEntityState(entity)
                     print("[SERVER] Serialized vertices_str: " .. v_str:sub(1, 50) .. "...")
                 else
                     print("PROTOCOL WARNING: Asteroid " ..
-                    tostring(entity.network_id) .. " has invalid vertices: " .. tostring(verts))
+                        tostring(entity.network_id) .. " has invalid vertices: " .. tostring(verts))
                 end
             else
                 print("[SERVER] Asteroid " .. tostring(entity.network_id) .. " MISSING render.vertices!")
@@ -242,6 +244,19 @@ function Protocol.createEntityState(entity)
             state.length = entity.render.length
             state.thickness = entity.render.thickness
             state.shape = entity.render.shape
+        elseif state.type == "item" then
+            -- Sync item data
+            state.item_type = entity.item.type
+            state.item_name = entity.item.name
+            state.item_volume = entity.item.volume
+
+            -- Sync shape vertices
+            if entity.render.shape then
+                state.shape = entity.render.shape
+            end
+
+            -- Sync color
+            state.color = entity.render.color
         end
     end
 

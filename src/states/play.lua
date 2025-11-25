@@ -503,11 +503,22 @@ function PlayState:enter(prev, param)
                     chunk:give("transform", state.x, state.y, state.r or 0)
                     chunk:give("sector", state.sx, state.sy)
 
+                    -- Parse vertices from string if available (same as asteroids)
+                    local vertices = nil
+                    if state.vertices_str then
+                        vertices = {}
+                        for num in string.gmatch(state.vertices_str, "[^,]+") do
+                            table.insert(vertices, tonumber(num))
+                        end
+                    elseif state.vertices then
+                        vertices = state.vertices
+                    end
+
                     chunk:give("render", {
                         render_type = "asteroid_chunk",
                         color = state.color or { 0.7, 0.7, 0.7, 1 },
                         radius = state.radius or 10,
-                        vertices = state.vertices,
+                        vertices = vertices,
                         seed = state.seed,
                     })
                     chunk:give("asteroid_chunk")
@@ -516,12 +527,12 @@ function PlayState:enter(prev, param)
                         chunk:give("hp", state.hp_max or state.hp_current or 10, state.hp_current or state.hp_max or 10)
                     end
 
-                    if self.world.physics_world and state.vertices then
+                    if self.world.physics_world and vertices then
                         local body = love.physics.newBody(self.world.physics_world, state.x, state.y, "dynamic")
                         body:setLinearDamping(1.0)
                         body:setAngularDamping(1.0)
 
-                        local verts = state.vertices
+                        local verts = vertices
                         local shape
                         if type(verts) == "table" and #verts >= 6 and (#verts % 2 == 0) then
                             -- Clamp chunk polygons to Box2D 8-vertex limit as well
@@ -610,6 +621,39 @@ function PlayState:enter(prev, param)
 
                         self.world.networked_entities[state.id] = projectile
                     end
+                elseif state.type == "item" then
+                    -- Spawn remote item
+                    local item = Concord.entity(self.world)
+                    item.network_id = state.id
+
+                    item:give("transform", state.x, state.y, state.r or 0)
+                    item:give("sector", state.sx, state.sy)
+
+                    item:give("render", {
+                        render_type = "item",
+                        color = state.color or { 1, 1, 1, 1 },
+                        shape = state.shape
+                    })
+
+                    item:give("item", state.item_type, state.item_name, state.item_volume)
+
+                    -- Create physics body (kinematic, no fixtures like host)
+                    if self.world.physics_world then
+                        local body = love.physics.newBody(self.world.physics_world, state.x, state.y, "kinematic")
+                        body:setLinearDamping(2.0)
+                        body:setAngularDamping(2.0)
+
+                        item:give("physics", body, nil, nil)
+
+                        if state.vx and state.vy then
+                            body:setLinearVelocity(state.vx, state.vy)
+                        end
+                        if state.angular_velocity then
+                            body:setAngularVelocity(state.angular_velocity)
+                        end
+                    end
+
+                    self.world.networked_entities[state.id] = item
                 end
             end
         end

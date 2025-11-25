@@ -7,14 +7,14 @@ return {
     LERP_FACTOR = 10.0,
 
     -- Network Reconciliation Thresholds (pixels)
-    RECONCILE_SNAP_DISTANCE = 75, -- Local player ship (lowered from 150)
-    RECONCILE_REMOTE_SHIP = 100,  -- Remote player ships
+    -- Lowered significantly to prevent shooting misalignment between host and client
+    RECONCILE_SNAP_DISTANCE = 25, -- Local player ship (was 150, then 75, now 25)
+    RECONCILE_REMOTE_SHIP = 30,   -- Remote player ships (was 100, now 30)
     RECONCILE_ASTEROID = 50,      -- Asteroids and chunks
     RECONCILE_PROJECTILE = 25,    -- Projectiles
 
     -- Infinite Universe Config
     SECTOR_SIZE = 10000, -- The width/height of one "Sector" before coordinates wrap
-    -- WORLD_WIDTH/HEIGHT removed because the world is now infinite
 
     -- Camera
     CAMERA_MIN_ZOOM = 0.5,
