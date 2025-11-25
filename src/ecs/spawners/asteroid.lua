@@ -129,10 +129,26 @@ local function spawn_single(world, sector_x, sector_y, x, y, radius, color, netw
         initial_rotation = rng:random() * math.pi * 2 -- Random angle 0-2π
     end
 
+    body:setAngle(initial_rotation)
+
     local asteroid = Concord.entity(world)
     if network_id then
         asteroid.network_id = network_id
     end
+
+    asteroid:give("transform", x, y, initial_rotation)
+    asteroid:give("sector", sector_x or 0, sector_y or 0)
+    asteroid:give("physics", body, shape, fixture)
+    asteroid:give("render", {
+        type = "asteroid",
+        color = color or { 0.6, 0.6, 0.6, 1 },
+        radius = radius,
+        vertices = vertices,
+    })
+    asteroid:give("asteroid", seed)
+
+    local hp_max = math.floor((radius or 30) * 2)
+    asteroid:give("hp", hp_max)
 
     fixture:setUserData(asteroid)
 

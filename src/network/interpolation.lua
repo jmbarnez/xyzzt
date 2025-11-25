@@ -5,7 +5,7 @@ local Interpolation = {}
 local BUFFER_SIZE = 32
 
 -- How far behind real time (in seconds) the render interpolation should be
-local INTERPOLATION_DELAY = 0.1
+local INTERPOLATION_DELAY = 0.15
 
 -- Create a new interpolation buffer
 function Interpolation.createBuffer()

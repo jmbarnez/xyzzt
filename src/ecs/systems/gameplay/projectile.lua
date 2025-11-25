@@ -36,7 +36,7 @@ function ProjectileSystem:collision(entityA, entityB, contact)
     end
 
     local projectile = projectile_entity.projectile
-    if not projectile then
+    if not projectile or projectile.predicted then
         return
     end
 

@@ -31,11 +31,14 @@ function WeaponSystem:update(dt)
             weapon.cooldown = 0
         end
 
-        if is_pure_client then
+        if not input.fire or weapon.cooldown > 0 then
             goto continue_weapon
         end
 
-        if not input.fire or weapon.cooldown > 0 then
+        local is_local_shooter = (world and world.local_ship and e == world.local_ship)
+
+        -- On pure clients, only spawn projectiles for the local player's ship (predicted projectiles)
+        if is_pure_client and not is_local_shooter then
             goto continue_weapon
         end
 
@@ -76,6 +79,11 @@ function WeaponSystem:update(dt)
             projectile:give("transform", px, py, angle)
             projectile:give("sector", sector.x, sector.y)
             projectile:give("projectile", weapon_def.damage, weapon_def.lifetime or 1.5, e)
+
+            -- Mark locally spawned projectiles on pure clients as predicted so they don't apply gameplay effects
+            if is_pure_client and is_local_shooter then
+                projectile.projectile.predicted = true
+            end
 
             local proj_cfg = weapon_def.projectile or {}
             local render_type = proj_cfg.type or proj_cfg.render_type or "projectile"
