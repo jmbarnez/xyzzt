@@ -102,6 +102,10 @@ function WeaponSystem:update(dt)
                 shape = proj_shape
             })
 
+            if projectile.projectile then
+                projectile.projectile.radius = proj_radius
+            end
+
             -- Assign a unique network ID so clients can see this projectile
             if assign_network_ids and Server then
                 projectile.network_id = Server.next_network_id

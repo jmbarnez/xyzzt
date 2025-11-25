@@ -54,8 +54,17 @@ function RenderStrategies.asteroid(e)
     local poly = nil
     local mesh = nil
 
+    local isNetworkedAsteroid = (e.asteroid ~= nil) and (e.network_id ~= nil)
+
     if type(r) == "table" and r.vertices then
         poly = r.vertices
+    elseif isNetworkedAsteroid then
+        -- For network-synced asteroids, never generate a new random shape.
+        -- If vertices are missing for some reason, fall back to a simple circle
+        -- so the host and all clients see the same basic geometry instead of
+        -- diverging random polygons.
+        love.graphics.circle("fill", 0, 0, radius)
+        return
     else
         -- Check if we have a cached mesh
         local meshKey = key .. "_mesh"

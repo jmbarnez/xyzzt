@@ -90,6 +90,16 @@ function TargetPanel.draw(world, player)
         -- User said "hp bar for all entities for now", implying visual.
     end
 
+    if world.debug_asteroid_overlay then
+        local debugY = panelY + panelHeight - 16
+        love.graphics.setFont(fontTitle)
+        love.graphics.setColor(Theme.colors.textPrimary)
+        local id_text = "ID: " .. tostring(target.network_id or "nil")
+        local rot = (target.transform and target.transform.r) or 0
+        local rot_text = string.format("Rot: %.2f", rot)
+        love.graphics.print(id_text .. "  " .. rot_text, cx, debugY)
+    end
+
     love.graphics.setLineWidth(1)
 end
 

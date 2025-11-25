@@ -36,6 +36,7 @@ local DefaultSector         = require "src.data.default_sector"
 
 local PlayState             = {}
 PlayState.server_time_offset = nil
+local debugPrintedRemoteAsteroids = {}
 
 local function createLocalPlayer(world)
     local player = Concord.entity(world)
@@ -125,6 +126,7 @@ function PlayState:enter(prev, param)
 
     self.world = Concord.world()
     self.world.background = Background.new()
+    self.world.debug_asteroid_overlay = false
 
     -- Camera
     self.world.camera = Camera.new()
@@ -755,6 +757,13 @@ function PlayState:keypressed(key)
     -- 1. Check Chat First
     if Chat.keypressed(key) then
         return -- Chat consumed the input
+    end
+
+    if key == "f1" then
+        if self.world then
+            self.world.debug_asteroid_overlay = not self.world.debug_asteroid_overlay
+        end
+        return
     end
 
     -- F5: Start hosting (like Minecraft's "Open to LAN")

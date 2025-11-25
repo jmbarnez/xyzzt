@@ -1,5 +1,6 @@
 local EntityUtils = require "src.utils.entity_utils"
 local ProjectileShatter = require "src.effects.projectile_shatter"
+local Client = require "src.network.client"
 
 local CollisionHandlers = {}
 
@@ -7,20 +8,27 @@ local CollisionHandlers = {}
 function CollisionHandlers.handle_projectile_hit(projectile, target, world)
     if not (projectile and target and world) then return end
 
+    local proj_comp = projectile.projectile
+    if not proj_comp then return end
+
     -- Get damage
-    local damage = 0
-    if projectile.projectile and projectile.projectile.damage then
-        damage = projectile.projectile.damage
+    -- Mark projectile as hit; ProjectileSystem will handle shatter + cleanup
+    proj_comp.hit_something = true
+
+    local is_pure_client = (world and not world.hosting and Client.connected)
+    if is_pure_client then
+        return
     end
+
+    local damage = proj_comp.damage or 0
 
     -- Apply damage
-    if target.hp then
-        EntityUtils.apply_damage(target, damage)
+    if target.asteroid or target.asteroid_chunk then
+        return
     end
 
-    -- Mark projectile as hit; ProjectileSystem will handle shatter + cleanup
-    if projectile.projectile then
-        projectile.projectile.hit_something = true
+    if target.hp then
+        EntityUtils.apply_damage(target, damage)
     end
 end
 

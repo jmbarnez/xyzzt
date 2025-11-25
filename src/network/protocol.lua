@@ -4,6 +4,7 @@
 local bitser = require "lib.bitser"
 
 local Protocol = {}
+local debugPrintedAsteroids = {}
 
 -- Network Configuration
 Protocol.TICK_RATE = 20 -- Server updates per second (20Hz = 50ms per tick)
@@ -230,6 +231,11 @@ function Protocol.createEntityState(entity)
             state.thickness = entity.render.thickness
             state.shape = entity.render.shape
         end
+    end
+
+    if state.type == "asteroid" and state.vertices and not debugPrintedAsteroids[state.id] then
+        print("NET ASTEROID HOST id=" .. tostring(state.id) .. " verts=" .. table.concat(state.vertices, ","))
+        debugPrintedAsteroids[state.id] = true
     end
 
     -- Add damage and owner for projectiles

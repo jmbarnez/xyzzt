@@ -112,13 +112,22 @@ function RenderSystem:draw()
                 love.graphics.push()
                 love.graphics.translate(relative_x, relative_y)
 
-
-
                 love.graphics.rotate(t.r or 0)
 
                 RenderStrategies.draw(e)
 
                 if world and world.ui and world.ui.hover_target == e then
+                    if world.debug_asteroid_overlay and e.asteroid and type(r) == "table" and r.vertices then
+                        world._debug_draw_asteroid_printed = world._debug_draw_asteroid_printed or {}
+                        local printed = world._debug_draw_asteroid_printed
+                        local nid = e.network_id or -1
+                        if nid ~= -1 and not printed[nid] then
+                            local label = world.hosting and "HOST" or "CLIENT"
+                            print("DRAW ASTEROID " .. label .. " id=" .. tostring(nid) .. " verts=" ..
+                                table.concat(r.vertices, ","))
+                            printed[nid] = true
+                        end
+                    end
                     -- Bright Cyan Outline
                     love.graphics.setColor(0, 1, 1, 1)
                     love.graphics.setLineWidth(2) -- Slightly thicker for visibility
