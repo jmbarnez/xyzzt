@@ -1,6 +1,7 @@
 local Concord = require "lib.concord.concord"
 local WeaponRegistry = require "src.managers.weapon_registry"
 local MathUtils = require "src.utils.math_utils"
+local Client = require "src.network.client"
 
 local WeaponSystem = Concord.system({
     pool = { "weapon", "input", "transform", "sector" }
@@ -11,6 +12,14 @@ local WeaponSystem = Concord.system({
 function WeaponSystem:update(dt)
     local world = self:getWorld()
 
+    -- Determine if we should assign network IDs (host/server-side only)
+    local assign_network_ids = (world and world.hosting and world.server and world.server.next_network_id ~= nil)
+    local Server = world and world.server or nil
+
+    -- Pure network clients (joined games) should not spawn their own projectiles locally;
+    -- they only render projectiles replicated from the host/server.
+    local is_pure_client = (world and not world.hosting and Client.connected)
+
     for _, e in ipairs(self.pool) do
         local weapon = e.weapon
         local input = e.input
@@ -20,6 +29,10 @@ function WeaponSystem:update(dt)
         weapon.cooldown = (weapon.cooldown or 0) - dt
         if weapon.cooldown < 0 then
             weapon.cooldown = 0
+        end
+
+        if is_pure_client then
+            goto continue_weapon
         end
 
         if not input.fire or weapon.cooldown > 0 then
@@ -55,9 +68,9 @@ function WeaponSystem:update(dt)
             local mx = mount.x or 0
             local my = mount.y or 0
 
+            -- Always spawn projectiles from the authoritative transform position
             local px = transform.x + mx * cos_a - my * sin_a
             local py = transform.y + mx * sin_a + my * cos_a
-
 
             local projectile = Concord.entity(world)
             projectile:give("transform", px, py, angle)
@@ -80,6 +93,12 @@ function WeaponSystem:update(dt)
                 thickness = proj_thickness,
                 shape = proj_shape
             })
+
+            -- Assign a unique network ID so clients can see this projectile
+            if assign_network_ids and Server then
+                projectile.network_id = Server.next_network_id
+                Server.next_network_id = Server.next_network_id + 1
+            end
             if world.physics_world then
                 local body = love.physics.newBody(world.physics_world, px, py, "dynamic")
                 body:setBullet(true)

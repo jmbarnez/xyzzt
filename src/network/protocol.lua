@@ -66,15 +66,24 @@ end
 --- @param move_x number Movement X (-1, 0, 1)
 --- @param move_y number Movement Y (-1, 0, 1)
 --- @param fire boolean Is firing
+--- @param angle number Target angle for aiming
+--- @param client_time number Client timestamp when input was created
+--- @param pos_x number Client's ship X position (for shooting)
+--- @param pos_y number Client's ship Y position (for shooting)
+--- @param rotation number Client's ship rotation
 --- @return table packet
-function Protocol.createInputPacket(tick, move_x, move_y, fire, angle)
+function Protocol.createInputPacket(tick, move_x, move_y, fire, angle, client_time, pos_x, pos_y, rotation)
     return {
         type = Protocol.PacketType.INPUT,
         tick = tick,
         move_x = move_x or 0,
         move_y = move_y or 0,
         fire = fire or false,
-        angle = angle or 0
+        angle = angle or 0,
+        client_time = client_time or 0,
+        pos_x = pos_x,
+        pos_y = pos_y,
+        rotation = rotation
     }
 end
 
@@ -172,6 +181,31 @@ function Protocol.createEntityState(entity)
     if entity.hp then
         state.hp_current = entity.hp.current
         state.hp_max = entity.hp.max
+    end
+
+    -- Add rendering properties for asteroids and projectiles
+    if entity.render then
+        if state.type == "asteroid" then
+            state.radius = entity.render.radius
+            state.color = entity.render.color
+        elseif state.type == "projectile" then
+            state.radius = entity.render.radius
+            state.color = entity.render.color
+            state.length = entity.render.length
+            state.thickness = entity.render.thickness
+            state.shape = entity.render.shape
+        end
+    end
+
+    -- Add damage and owner for projectiles
+    if state.type == "projectile" and entity.projectile then
+        state.damage = entity.projectile.damage
+        state.lifetime = entity.projectile.lifetime
+
+        -- Track owner network ID if available so clients can avoid self-collision visuals
+        if entity.projectile.owner and entity.projectile.owner.network_id then
+            state.owner_id = entity.projectile.owner.network_id
+        end
     end
 
     return state

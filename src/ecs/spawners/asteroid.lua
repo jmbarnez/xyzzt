@@ -1,93 +1,93 @@
-local Concord   = require "lib.concord.concord"
-local Config    = require "src.config"
-local ChunkTypes = require "src.data.chunks"
+local Concord          = require "lib.concord.concord"
+local Config           = require "src.config"
+local ChunkTypes       = require "src.data.chunks"
 
-local Asteroids = {}
+local Asteroids        = {}
 
-local AsteroidTypes = {
-	rocky = {
-		name = "Rocky Asteroid",
-		composition = { stone = 1.0 },
-	},
-	metallic = {
-		name = "Metallic Asteroid",
-		composition = { stone = 0.5, iron = 0.5 },
-	},
+local AsteroidTypes    = {
+    rocky = {
+        name = "Rocky Asteroid",
+        composition = { stone = 1.0 },
+    },
+    metallic = {
+        name = "Metallic Asteroid",
+        composition = { stone = 0.5, iron = 0.5 },
+    },
 }
 
 local AsteroidTypeList = {
-	AsteroidTypes.rocky,
-	AsteroidTypes.metallic,
+    AsteroidTypes.rocky,
+    AsteroidTypes.metallic,
 }
 
 local function clamp01(v)
-	if v < 0 then return 0 end
-	if v > 1 then return 1 end
-	return v
+    if v < 0 then return 0 end
+    if v > 1 then return 1 end
+    return v
 end
 
 local function mix_resource_colors(composition)
-	if not composition then
-		return { 0.6, 0.6, 0.6, 1 }
-	end
+    if not composition then
+        return { 0.6, 0.6, 0.6, 1 }
+    end
 
-	local r, g, b, a, total = 0, 0, 0, 0, 0
-	for res, weight in pairs(composition) do
-		if weight and weight > 0 then
-			local def = ChunkTypes[res]
-			if def and def.color then
-				local c = def.color
-				r = r + (c[1] or 1) * weight
-				g = g + (c[2] or 1) * weight
-				b = b + (c[3] or 1) * weight
-				a = a + (c[4] or 1) * weight
-				total = total + weight
-			end
-		end
-	end
+    local r, g, b, a, total = 0, 0, 0, 0, 0
+    for res, weight in pairs(composition) do
+        if weight and weight > 0 then
+            local def = ChunkTypes[res]
+            if def and def.color then
+                local c = def.color
+                r = r + (c[1] or 1) * weight
+                g = g + (c[2] or 1) * weight
+                b = b + (c[3] or 1) * weight
+                a = a + (c[4] or 1) * weight
+                total = total + weight
+            end
+        end
+    end
 
-	if total > 0 then
-		return {
-			clamp01(r / total),
-			clamp01(g / total),
-			clamp01(b / total),
-			clamp01(a / total),
-		}
-	end
+    if total > 0 then
+        return {
+            clamp01(r / total),
+            clamp01(g / total),
+            clamp01(b / total),
+            clamp01(a / total),
+        }
+    end
 
-	return { 0.6, 0.6, 0.6, 1 }
+    return { 0.6, 0.6, 0.6, 1 }
 end
 
 local function jitter_color(base, rng)
-	local j = 0.08
+    local j = 0.08
 
-	local br = base[1] or 1
-	local bg = base[2] or 1
-	local bb = base[3] or 1
-	local ba = base[4] or 1
+    local br = base[1] or 1
+    local bg = base[2] or 1
+    local bb = base[3] or 1
+    local ba = base[4] or 1
 
-	local function rand01()
-		if rng and type(rng) == "table" and rng.random then
-			return rng:random()
-		else
-			return math.random()
-		end
-	end
+    local function rand01()
+        if rng and type(rng) == "table" and rng.random then
+            return rng:random()
+        else
+            return math.random()
+        end
+    end
 
-	local function jitter_channel(c)
-		local shift = (rand01() - 0.5) * 2 * j
-		return clamp01(c + shift)
-	end
+    local function jitter_channel(c)
+        local shift = (rand01() - 0.5) * 2 * j
+        return clamp01(c + shift)
+    end
 
-	return {
-		jitter_channel(br),
-		jitter_channel(bg),
-		jitter_channel(bb),
-		ba,
-	}
+    return {
+        jitter_channel(br),
+        jitter_channel(bg),
+        jitter_channel(bb),
+        ba,
+    }
 end
 
-local function spawn_single(world, sector_x, sector_y, x, y, radius, color)
+local function spawn_single(world, sector_x, sector_y, x, y, radius, color, network_id)
     local body = love.physics.newBody(world.physics_world, x, y, "dynamic")
     body:setLinearDamping(Config.LINEAR_DAMPING * 2)
     body:setAngularDamping(Config.LINEAR_DAMPING * 2)
@@ -111,8 +111,8 @@ local function spawn_single(world, sector_x, sector_y, x, y, radius, color)
         table.insert(vertices, math.sin(angle) * rr)
     end
 
-    local shape       = love.physics.newPolygonShape(vertices)
-    local fixture     = love.physics.newFixture(body, shape, 1.0)
+    local shape   = love.physics.newPolygonShape(vertices)
+    local fixture = love.physics.newFixture(body, shape, 1.0)
     fixture:setRestitution(0.1)
 
     local asteroid = Concord.entity(world)
@@ -124,6 +124,11 @@ local function spawn_single(world, sector_x, sector_y, x, y, radius, color)
     local hp_max = math.floor((radius or 30) * 1.5)
     asteroid:give("hp", hp_max)
     asteroid:give("asteroid")
+
+    -- Assign network_id if provided (for server-authoritative spawning)
+    if network_id then
+        asteroid.network_id = network_id
+    end
 
     fixture:setUserData(asteroid)
 
@@ -152,6 +157,14 @@ function Asteroids.spawnField(world, sector_x, sector_y, seed, count)
     local half_size = (Config.SECTOR_SIZE or 10000) * 0.5
     local inner_radius = half_size * 0.1
     local outer_radius = half_size * 0.8
+
+    -- Check if we need to assign network IDs (server/host mode)
+    local Server = nil
+    local assign_network_ids = false
+    if world.hosting then
+        Server = require "src.network.server"
+        assign_network_ids = true
+    end
 
     for i = 1, count do
         local a
@@ -186,7 +199,14 @@ function Asteroids.spawnField(world, sector_x, sector_y, seed, count)
         local base_color = mix_resource_colors(at and at.composition)
         local color = jitter_color(base_color, rng)
 
-        local asteroid = spawn_single(world, sector_x or 0, sector_y or 0, x, y, radius, color)
+        -- Assign network_id if we're on the server/host
+        local network_id = nil
+        if assign_network_ids and Server then
+            network_id = Server.next_network_id
+            Server.next_network_id = Server.next_network_id + 1
+        end
+
+        local asteroid = spawn_single(world, sector_x or 0, sector_y or 0, x, y, radius, color, network_id)
         if asteroid and at then
             asteroid:give("asteroid_composition", at.composition)
             if not asteroid.name then
@@ -195,5 +215,8 @@ function Asteroids.spawnField(world, sector_x, sector_y, seed, count)
         end
     end
 end
+
+-- Export spawn_single for client-side network spawning
+Asteroids.spawn_single = spawn_single
 
 return Asteroids

@@ -59,8 +59,15 @@ function Client.update(dt)
 
     Client.tick = Client.tick + 1
 
-    -- Process network events
-    local event = Client.host:service(0) -- Non-blocking
+    -- Process network events (guard against ENet service errors)
+    local ok, event = pcall(function()
+        return Client.host:service(0) -- Non-blocking
+    end)
+
+    if not ok then
+        print("Client: ENet service error: " .. tostring(event))
+        return
+    end
 
     while event do
         if event.type == "connect" then
@@ -71,7 +78,14 @@ function Client.update(dt)
             Client.onDisconnect(event.peer)
         end
 
-        event = Client.host:service(0)
+        ok, event = pcall(function()
+            return Client.host:service(0)
+        end)
+
+        if not ok then
+            print("Client: ENet service error: " .. tostring(event))
+            break
+        end
     end
 end
 
@@ -127,12 +141,15 @@ function Client.onDisconnect(peer)
     Client.peer = nil
 end
 
-function Client.sendInput(move_x, move_y, fire, angle)
+function Client.sendInput(move_x, move_y, fire, angle, pos_x, pos_y, rotation)
     if not Client.connected or not Client.peer then
         return
     end
 
-    local packet = Protocol.createInputPacket(Client.tick, move_x, move_y, fire, angle)
+    -- Include client timestamp for lag compensation
+    local client_time = love.timer.getTime()
+    local packet = Protocol.createInputPacket(Client.tick, move_x, move_y, fire, angle, client_time, pos_x, pos_y,
+        rotation)
     local data = Protocol.serialize(packet)
 
     Client.peer:send(data, 0, "reliable") -- Channel 0, reliable delivery

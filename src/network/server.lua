@@ -108,7 +108,14 @@ function Server.processEvents()
     if not Server.host then return end
 
     -- Service the ENet host (non-blocking)
-    local event = Server.host:service(0)
+    local ok, event = pcall(function()
+        return Server.host:service(0)
+    end)
+
+    if not ok then
+        print("Server: ENet service error: " .. tostring(event))
+        return
+    end
 
     while event do
         if event.type == "connect" then
@@ -195,6 +202,13 @@ function Server.onClientReceive(peer, data)
             player.entity.input.move_y = packet.move_y or 0
             player.entity.input.fire = packet.fire or false
             player.entity.input.target_angle = packet.angle or 0
+
+            -- Store client position for accurate projectile spawning
+            if packet.fire and packet.pos_x then
+                player.entity.input.client_pos_x = packet.pos_x
+                player.entity.input.client_pos_y = packet.pos_y
+                player.entity.input.client_rotation = packet.rotation
+            end
         end
     elseif packet.type == Protocol.PacketType.CHAT then
         -- Broadcast chat message to all clients

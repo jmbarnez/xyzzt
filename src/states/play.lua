@@ -158,8 +158,42 @@ function PlayState:enter(prev, param)
 
                 -- Update existing entity
                 -- For OUR ship: only update HP, not position (client-side prediction)
-                -- For REMOTE ships: update everything
-                if not is_my_ship then
+                -- UNLESS we are too far out of sync (e.g. collision on server but not client)
+                if is_my_ship then
+                    if entity.transform then
+                        local dx = entity.transform.x - state.x
+                        local dy = entity.transform.y - state.y
+                        local dist_sq = dx * dx + dy * dy
+                        local threshold = 50 * 50 -- 50 pixel threshold for reconciliation
+
+                        if dist_sq > threshold then
+                            -- Smooth reconciliation (Lerp)
+                            -- Instead of snapping instantly, move 20% closer each frame
+                            -- This creates a "rubber band" effect that is less jarring
+                            local smooth_factor = 0.2
+                            
+                            local new_x = entity.transform.x + (state.x - entity.transform.x) * smooth_factor
+                            local new_y = entity.transform.y + (state.y - entity.transform.y) * smooth_factor
+                            
+                            entity.transform.x = new_x
+                            entity.transform.y = new_y
+                            
+                            -- Also update physics body smoothly
+                            if entity.physics and entity.physics.body and not entity.physics.body:isDestroyed() then
+                                entity.physics.body:setPosition(new_x, new_y)
+                                
+                                -- Blend velocity to prevent "fighting" the correction
+                                if state.vx and state.vy then
+                                    local vx, vy = entity.physics.body:getLinearVelocity()
+                                    local new_vx = vx + (state.vx - vx) * smooth_factor
+                                    local new_vy = vy + (state.vy - vy) * smooth_factor
+                                    entity.physics.body:setLinearVelocity(new_vx, new_vy)
+                                end
+                            end
+                        end
+                    end
+                else
+                    -- For REMOTE ships: always update everything
                     if entity.transform then
                         entity.transform.x = state.x
                         entity.transform.y = state.y
@@ -169,7 +203,7 @@ function PlayState:enter(prev, param)
                         entity.sector.x = state.sx
                         entity.sector.y = state.sy
                     end
-                    if entity.physics and entity.physics.body then
+                    if entity.physics and entity.physics.body and not entity.physics.body:isDestroyed() then
                         -- Update rotation on physics body
                         entity.physics.body:setAngle(state.r)
                         -- Update velocity
@@ -202,7 +236,7 @@ function PlayState:enter(prev, param)
                             ship.sector.x = state.sx
                             ship.sector.y = state.sy
                         end
-                        if ship.physics and ship.physics.body then
+                        if ship.physics and ship.physics.body and not ship.physics.body:isDestroyed() then
                             -- Set rotation on physics body
                             ship.physics.body:setAngle(state.r)
                             -- Set velocity
@@ -230,8 +264,88 @@ function PlayState:enter(prev, param)
                             end
                         end
                     end
+                elseif state.type == "asteroid" then
+                    -- Spawn remote asteroid
+                    local asteroid = Asteroids.spawn_single(
+                        self.world,
+                        state.sx,
+                        state.sy,
+                        state.x,
+                        state.y,
+                        state.radius or 30,
+                        state.color or { 0.6, 0.6, 0.6, 1 },
+                        state.id
+                    )
+
+                    if asteroid then
+                        if asteroid.transform then
+                            asteroid.transform.r = state.r
+                        end
+                        if asteroid.physics and asteroid.physics.body then
+                            asteroid.physics.body:setAngle(state.r)
+                            if state.vx and state.vy then
+                                asteroid.physics.body:setLinearVelocity(state.vx, state.vy)
+                            end
+                        end
+                        if asteroid.hp and state.hp_current then
+                            asteroid.hp.current = state.hp_current
+                        end
+                        self.world.networked_entities[state.id] = asteroid
+                    end
+                elseif state.type == "projectile" then
+                    -- Spawn remote projectile
+                    local projectile = Concord.entity(self.world)
+                    projectile.network_id = state.id
+                    projectile:give("transform", state.x, state.y, state.r or 0)
+                    projectile:give("sector", state.sx, state.sy)
+
+                    -- Resolve projectile owner on the client (if provided) so we can
+                    -- avoid self-collision visuals and logic.
+                    local owner_entity = nil
+                    if state.owner_id then
+                        owner_entity = self.world.networked_entities[state.owner_id]
+                    end
+                    projectile:give("projectile", state.damage or 10, state.lifetime or 1.5, owner_entity)
+                    projectile:give("render", {
+                        type = "projectile",
+                        color = state.color or { 1, 0.5, 0 },
+                        radius = state.radius or 3,
+                        length = state.length,
+                        thickness = state.thickness,
+                        shape = state.shape or "beam"
+                    })
+
+                    if self.world.physics_world then
+                        local body = love.physics.newBody(self.world.physics_world, state.x, state.y, "dynamic")
+                        body:setBullet(true)
+                        body:setAngle(state.r or 0)
+
+                        local radius = state.radius or 3
+                        local length = state.length or (radius * 4)
+                        local thickness = state.thickness or (radius * 0.7)
+                        local half_length = length * 0.5
+                        local half_thickness = thickness * 0.5
+
+                        local shape = love.physics.newPolygonShape(
+                            -half_length, -half_thickness,
+                            half_length, -half_thickness,
+                            half_length, half_thickness,
+                            -half_length, half_thickness
+                        )
+
+                        local fixture = love.physics.newFixture(body, shape, 0.1)
+                        fixture:setRestitution(0)
+                        fixture:setSensor(true)
+                        projectile:give("physics", body, shape, fixture)
+                        fixture:setUserData(projectile)
+
+                        if state.vx and state.vy then
+                            body:setLinearVelocity(state.vx, state.vy)
+                        end
+                    end
+
+                    self.world.networked_entities[state.id] = projectile
                 end
-                -- TODO: Handle other entity types (asteroids, projectiles, etc.) when needed
             end
         end
     end)
@@ -346,7 +460,7 @@ function PlayState:enter(prev, param)
     local universe_seed = Config.UNIVERSE_SEED or 12345
 
     -- Spawn asteroids in starting sector
-    if DefaultSector.asteroids.enabled then
+    if DefaultSector.asteroids.enabled and not is_joining then
         Asteroids.spawnField(
             self.world,
             player_sector_x,
@@ -400,7 +514,16 @@ function PlayState:update(dt)
     local Client = require "src.network.client"
     if not self.world.hosting and Client.connected and self.world.local_ship and self.world.local_ship.input then
         local input = self.world.local_ship.input
-        Client.sendInput(input.move_x or 0, input.move_y or 0, input.fire or false, input.target_angle or 0)
+        local transform = self.world.local_ship.transform
+        Client.sendInput(
+            input.move_x or 0,
+            input.move_y or 0,
+            input.fire or false,
+            input.target_angle or 0,
+            transform.x,
+            transform.y,
+            transform.r
+        )
     end
 
     if self.world and self.world.camera and self.world.ui then
@@ -467,6 +590,7 @@ function PlayState:keypressed(key)
         -- Pass the host's existing world to the server!
         if Server.start(25565, self.world) then
             self.world.hosting = true
+            self.world.server = Server
             print("Hosting server on port 25565 (F5 pressed)")
             print("Your world is now open for others to join!")
 
@@ -475,6 +599,15 @@ function PlayState:keypressed(key)
                 self.world.local_ship.network_id = Server.next_network_id
                 Server.next_network_id = Server.next_network_id + 1
                 print("Host ship assigned network_id=" .. self.world.local_ship.network_id)
+            end
+
+            -- Retroactively assign network IDs to all existing asteroids and projectiles
+            -- This is CRITICAL: Asteroids spawned at game start (before hosting) need IDs to be synced!
+            for _, e in ipairs(self.world:getEntities()) do
+                if (e.asteroid or e.projectile) and not e.network_id then
+                    e.network_id = Server.next_network_id
+                    Server.next_network_id = Server.next_network_id + 1
+                end
             end
         end
         return
