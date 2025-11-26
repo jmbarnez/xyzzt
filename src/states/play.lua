@@ -33,6 +33,7 @@ local AsteroidChunkSystem         = require "src.ecs.systems.gameplay.asteroid_c
 local ProjectileShardSystem       = require "src.ecs.systems.visual.projectile_shard"
 local ItemPickupSystem            = require "src.ecs.systems.gameplay.item_pickup"
 local TrailSystem                 = require "src.ecs.systems.visual.trail"
+local AISystem                    = require "src.ecs.systems.gameplay.ai_system"
 local DefaultSector               = require "src.data.default_sector"
 
 local PlayState                   = {}
@@ -753,19 +754,20 @@ function PlayState:enter(prev, param)
     -- Order matters: Input -> Logic -> Physics -> Collision -> Gameplay -> Render
     self.world:addSystems(
         PlayerControlSystem, -- 1. Map Hardware to Input Component
-        MovementSystem,      -- 2. Apply Physics based on Input
-        PhysicsSystem,       -- 3. Step Box2D & Handle Sector Wrapping
-        CollisionSystem,     -- 4. Resolve Collisions (Damage, etc)
-        WeaponSystem,        -- 5. Fire weapons
-        ProjectileSystem,    -- 6. Update projectiles
-        DeathSystem,         -- 7. Handle HP <= 0
-        LootSystem,          -- 8. Spawn loot from dead entities
+        AISystem,            -- 2. AI Behavior Trees (controls enemy input)
+        MovementSystem,      -- 3. Apply Physics based on Input
+        PhysicsSystem,       -- 4. Step Box2D & Handle Sector Wrapping
+        CollisionSystem,     -- 5. Resolve Collisions (Damage, etc)
+        WeaponSystem,        -- 6. Fire weapons
+        ProjectileSystem,    -- 7. Update projectiles
+        DeathSystem,         -- 8. Handle HP <= 0
+        LootSystem,          -- 9. Spawn loot from dead entities
         AsteroidChunkSystem,
         ProjectileShardSystem,
-        ItemPickupSystem, -- 9. Magnet logic
-        TrailSystem,      -- 10. Update trails
-        RenderSystem,     -- 11. Draw everything
-        MinimapSystem     -- 12. UI Draw
+        ItemPickupSystem, -- 10. Magnet logic
+        TrailSystem,      -- 11. Update trails
+        RenderSystem,     -- 12. Draw everything
+        MinimapSystem     -- 13. UI Draw
     )
 
     -- Player meta-entity (local user, not the ship itself)

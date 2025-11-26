@@ -187,3 +187,33 @@ Concord.component("trail", function(c, config_list)
         end
     end
 end)
+
+-- AI behavior tree controller
+Concord.component("ai", function(c, behavior_tree)
+    c.behavior_tree = behavior_tree
+    c.blackboard = {}
+    c.update_interval = 0.1 -- AI ticks every 100ms
+    c.time_since_update = 0
+end)
+
+-- Detection and sensing
+Concord.component("detection", function(c, range, fov)
+    c.range = range or 500 -- Detection radius
+    c.fov = fov            -- Field of view in radians (nil = 360 degrees)
+    c.can_detect_cloaked = false
+end)
+
+-- Current target tracking
+Concord.component("target", function(c, entity)
+    c.entity = entity -- Target entity reference
+    c.last_seen_time = 0
+    c.last_known_x = 0
+    c.last_known_y = 0
+    c.pursuit_duration = 0
+end)
+
+-- Level-based stat scaling
+Concord.component("level_scaling", function(c, level)
+    c.level = level or 1
+    c.stat_multiplier = 1 + (level - 1) * 0.15 -- 15% per level
+end)
