@@ -10,8 +10,11 @@ local AISystem = Concord.system({
 function AISystem:update(dt)
     local world = self:getWorld()
 
-    -- Skip on pure clients - AI only runs on host/server
-    if world and not world.hosting then
+    local Client = require "src.network.client"
+
+    -- AI only runs on the authority (Host or Single Player)
+    -- If we are connected as a client and NOT hosting, we are a pure client -> Skip AI
+    if world and Client.connected and not world.hosting then
         return
     end
 

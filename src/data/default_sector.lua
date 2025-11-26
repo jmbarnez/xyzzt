@@ -5,14 +5,14 @@ return {
     -- Asteroid field configuration
     asteroids = {
         enabled = true,
-        count = 10, -- Number of asteroids per sector
+        count = 30, -- Number of asteroids per sector
         -- Distribution uses the sector seed for deterministic generation
     },
 
     -- Enemy ship configuration
     enemy_ships = {
         enabled = true,
-        count = 15,                      -- Number of enemy ships per sector
+        count = 3,                       -- Number of enemy ships per sector
         ship_name = "starter_drone",     -- All enemies use this ship
         -- Spatial distribution parameters
         min_distance_from_origin = 100,  -- Don't spawn too close to player start

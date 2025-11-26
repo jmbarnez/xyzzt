@@ -106,21 +106,23 @@ end
 --- @param player_id number Network ID
 --- @param entity_id number Entity ID in the world
 --- @return table packet
-function Protocol.createPlayerJoinedPacket(player_id, entity_id)
+function Protocol.createPlayerJoinedPacket(player_id, entity_id, player_count)
     return {
         type = Protocol.PacketType.PLAYER_JOINED,
         player_id = player_id,
-        entity_id = entity_id
+        entity_id = entity_id,
+        player_count = player_count
     }
 end
 
 --- Create a PLAYER_LEFT packet (Server -> Client)
 --- @param player_id number Network ID
 --- @return table packet
-function Protocol.createPlayerLeftPacket(player_id)
+function Protocol.createPlayerLeftPacket(player_id, player_count)
     return {
         type = Protocol.PacketType.PLAYER_LEFT,
-        player_id = player_id
+        player_id = player_id,
+        player_count = player_count
     }
 end
 
