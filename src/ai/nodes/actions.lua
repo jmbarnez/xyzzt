@@ -23,7 +23,7 @@ function Actions.ScanForTargets()
         local best_target = nil
         local best_dist_sq = detection_range * detection_range
 
-        -- Find all entities with pilot component (players)
+        -- Find all entities with pilot component (player ships)
         for _, potential_target in ipairs(world:getEntities()) do
             if potential_target.pilot and potential_target.transform and potential_target ~= entity then
                 -- Calculate distance
@@ -56,6 +56,7 @@ function Actions.ScanForTargets()
         if best_target then
             Blackboard.set(entity, "target", best_target)
             Blackboard.set(entity, "last_detection_time", love.timer.getTime())
+            print("[AI] Enemy detected player at distance: " .. math.sqrt(best_dist_sq))
             return BehaviorTree.Status.SUCCESS
         end
 

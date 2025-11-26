@@ -14,7 +14,7 @@ return {
     RECONCILE_PROJECTILE = 25,    -- Projectiles
 
     -- Infinite Universe Config
-    SECTOR_SIZE = 10000, -- The width/height of one "Sector" before coordinates wrap
+    SECTOR_SIZE = 2000, -- The width/height of one "Sector" before coordinates wrap
 
     -- Camera
     CAMERA_MIN_ZOOM = 0.5,

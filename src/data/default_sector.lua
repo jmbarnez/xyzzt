@@ -5,7 +5,7 @@ return {
     -- Asteroid field configuration
     asteroids = {
         enabled = true,
-        count = 40, -- Number of asteroids per sector
+        count = 10, -- Number of asteroids per sector
         -- Distribution uses the sector seed for deterministic generation
     },
 
@@ -15,9 +15,9 @@ return {
         count = 15,                      -- Number of enemy ships per sector
         ship_name = "starter_drone",     -- All enemies use this ship
         -- Spatial distribution parameters
-        min_distance_from_origin = 1000, -- Don't spawn too close to player start
-        max_distance_from_origin = 4500, -- Stay within sector bounds
-        min_separation = 300,            -- Minimum distance between enemy ships
+        min_distance_from_origin = 100,  -- Don't spawn too close to player start
+        max_distance_from_origin = 1000, -- Stay within sector bounds
+        min_separation = 50,             -- Minimum distance between enemy ships
     },
 
     -- Future: could add station spawning, resource nodes, etc.
