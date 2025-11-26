@@ -14,6 +14,8 @@ local Client = {
     tick = 0,
     player_id = nil,
     entity_id = nil,
+    input_interval = Protocol.TICK_INTERVAL,
+    last_input_send_time = 0,
 
     -- Callbacks
     onWorldState = nil,
@@ -132,8 +134,17 @@ function Client.sendInput(move_x, move_y, fire, angle, pos_x, pos_y, rotation)
         return
     end
 
+    local interval = Client.input_interval or 0
+    local now = love.timer.getTime()
+    if interval > 0 then
+        if (now - Client.last_input_send_time) < interval then
+            return
+        end
+        Client.last_input_send_time = now
+    end
+
     -- Include client timestamp for lag compensation
-    local client_time = love.timer.getTime()
+    local client_time = now
     local packet = Protocol.createInputPacket(Client.tick, move_x, move_y, fire, angle, client_time, pos_x, pos_y,
         rotation)
     local data = Protocol.serialize(packet)

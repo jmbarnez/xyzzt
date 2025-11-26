@@ -95,7 +95,7 @@ function Server.start(port)
 
             local data = Protocol.serialize(packet)
             for peer_id, client in pairs(Server.clients) do
-                client.peer:send(data, 0, "reliable")
+                client.peer:send(data, 0, "unreliable")
             end
 
             Server.accumulator = Server.accumulator - Protocol.TICK_INTERVAL

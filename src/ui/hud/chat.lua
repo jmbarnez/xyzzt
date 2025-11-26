@@ -29,7 +29,7 @@ function Chat.init()
     
     -- Initial welcome message
     Chat.addMessage("Welcome to NovusMP!", "system")
-    Chat.addMessage("Press ` (tilde) to chat.", "system")
+    Chat.addMessage("Press Enter to chat.", "system")
 end
 
 function Chat.addMessage(text, type, timestamp)
@@ -142,11 +142,11 @@ function Chat.keypressed(key)
         return false
     end
 
-    -- Toggle chat with ` (tilde)
-    if key == "`" then
-        Chat.active = not Chat.active
-        love.keyboard.setKeyRepeat(Chat.active)
-        return true -- Always consume the toggle key
+    -- Open chat with Enter when inactive
+    if (key == "return" or key == "kpenter") and not Chat.active then
+        Chat.active = true
+        love.keyboard.setKeyRepeat(true)
+        return true -- Consume the key so it doesn't trigger other actions
     end
 
     if Chat.active then

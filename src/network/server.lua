@@ -364,8 +364,13 @@ function Server.broadcast(packet)
 
     local data = Protocol.serialize(packet)
 
+    local flag = "reliable"
+    if packet.type == Protocol.PacketType.WORLD_STATE then
+        flag = "unreliable"
+    end
+
     for peer_id, client in pairs(Server.clients) do
-        client.peer:send(data, 0, "reliable")
+        client.peer:send(data, 0, flag)
     end
 end
 

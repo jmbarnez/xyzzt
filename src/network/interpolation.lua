@@ -5,7 +5,7 @@ local Interpolation = {}
 local BUFFER_SIZE = 32
 
 -- How far behind real time (in seconds) the render interpolation should be
-local INTERPOLATION_DELAY = 0.15
+local INTERPOLATION_DELAY = 0.20
 
 -- Create a new interpolation buffer
 function Interpolation.createBuffer()
@@ -80,7 +80,7 @@ function Interpolation.getInterpolatedState(buffer)
         local latest = buffer.states[#buffer.states]
 
         -- Extrapolate if render time is ahead (within reason)
-        if render_time > latest.time and (render_time - latest.time) < 0.05 then
+        if render_time > latest.time and (render_time - latest.time) < 0.10 then
             local dt = render_time - latest.time
             return {
                 x = latest.x + latest.vx * dt,
