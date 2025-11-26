@@ -79,28 +79,61 @@ function PhysicsSystem:update(dt)
             local r = body:getAngle()
             local sector_changed = false
 
-            if x > half_size then
-                x = x - Config.SECTOR_SIZE
-                s.x = s.x + 1
-                sector_changed = true
-            elseif x < -half_size then
-                x = x + Config.SECTOR_SIZE
-                s.x = s.x - 1
-                sector_changed = true
-            end
+            if e.pilot then
+                -- Clamp player to sector bounds and bounce
+                local vx, vy = body:getLinearVelocity()
+                local bounced = false
+                local bounce_factor = 0.5 -- Lose some energy
 
-            if y > half_size then
-                y = y - Config.SECTOR_SIZE
-                s.y = s.y + 1
-                sector_changed = true
-            elseif y < -half_size then
-                y = y + Config.SECTOR_SIZE
-                s.y = s.y - 1
-                sector_changed = true
-            end
+                if x > half_size then
+                    x = half_size
+                    vx = -math.abs(vx) * bounce_factor -- Ensure velocity points inward
+                    bounced = true
+                elseif x < -half_size then
+                    x = -half_size
+                    vx = math.abs(vx) * bounce_factor -- Ensure velocity points inward
+                    bounced = true
+                end
 
-            if sector_changed then
-                body:setPosition(x, y)
+                if y > half_size then
+                    y = half_size
+                    vy = -math.abs(vy) * bounce_factor -- Ensure velocity points inward
+                    bounced = true
+                elseif y < -half_size then
+                    y = -half_size
+                    vy = math.abs(vy) * bounce_factor -- Ensure velocity points inward
+                    bounced = true
+                end
+
+                if bounced then
+                    body:setPosition(x, y)
+                    body:setLinearVelocity(vx, vy)
+                end
+            else
+                -- Wrap other entities
+                if x > half_size then
+                    x = x - Config.SECTOR_SIZE
+                    s.x = s.x + 1
+                    sector_changed = true
+                elseif x < -half_size then
+                    x = x + Config.SECTOR_SIZE
+                    s.x = s.x - 1
+                    sector_changed = true
+                end
+
+                if y > half_size then
+                    y = y - Config.SECTOR_SIZE
+                    s.y = s.y + 1
+                    sector_changed = true
+                elseif y < -half_size then
+                    y = y + Config.SECTOR_SIZE
+                    s.y = s.y - 1
+                    sector_changed = true
+                end
+
+                if sector_changed then
+                    body:setPosition(x, y)
+                end
             end
 
             -- Sync visual transform

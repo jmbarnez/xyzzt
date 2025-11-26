@@ -70,7 +70,13 @@ function Interpolation.getInterpolatedState(buffer)
 
     -- If no bracketing states found, use extrapolation or latest state
     if not state_before or not state_after then
-        -- Use the latest state we have
+        -- If render_time is OLDER than our oldest state, we are lagging behind the buffer.
+        -- Return the oldest state to avoid snapping to the future.
+        if render_time < buffer.states[1].time then
+            return buffer.states[1]
+        end
+
+        -- Otherwise, we are ahead of the buffer (or empty), use the latest state
         local latest = buffer.states[#buffer.states]
 
         -- Extrapolate if render time is ahead (within reason)
@@ -105,7 +111,7 @@ function Interpolation.getInterpolatedState(buffer)
         vx = state_before.vx + (state_after.vx - state_before.vx) * alpha,
         vy = state_before.vy + (state_after.vy - state_before.vy) * alpha,
         angular_velocity = state_before.angular_velocity +
-        (state_after.angular_velocity - state_before.angular_velocity) * alpha
+            (state_after.angular_velocity - state_before.angular_velocity) * alpha
     }
 end
 

@@ -95,14 +95,14 @@ function Client.onReceive(peer, data)
             Client.onWorldState(packet)
         end
     elseif packet.type == Protocol.PacketType.PLAYER_JOINED then
-        print("Player joined: player_id=" .. packet.player_id)
+        -- Player joined (visible in HUD)
         if Client.onPlayerJoined then
-            Client.onPlayerJoined(packet.player_id, packet.entity_id)
+            Client.onPlayerJoined(packet.player_id, packet.entity_id, packet.player_count)
         end
     elseif packet.type == Protocol.PacketType.PLAYER_LEFT then
-        print("Player left: player_id=" .. packet.player_id)
+        -- Player left (visible in HUD)
         if Client.onPlayerLeft then
-            Client.onPlayerLeft(packet.player_id)
+            Client.onPlayerLeft(packet.player_id, packet.player_count)
         end
     elseif packet.type == Protocol.PacketType.WELCOME then
         print("Received WELCOME: player_id=" .. packet.player_id .. ", entity_id=" .. tostring(packet.entity_id))

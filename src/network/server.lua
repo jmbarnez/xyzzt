@@ -147,7 +147,7 @@ function Server.onClientConnect(peer)
     local player_id = Server.next_player_id
     Server.next_player_id = Server.next_player_id + 1
 
-    print("Client connected: peer_id=" .. peer_id .. ", player_id=" .. player_id)
+    -- Client connected: peer_id and player_id assigned
 
     -- Spawn player ship directly in the host's world
     local ShipSystem = require "src.ecs.spawners.ship"
@@ -171,7 +171,7 @@ function Server.onClientConnect(peer)
             ship.render.color = { 1, 0.5, 0.2 } -- Orange for remote players
         end
 
-        print("Server: Spawned ship for player " .. player_id .. " at (" .. spawn_x .. ", " .. spawn_y .. ")")
+        -- Ship spawned for player
     end
 
     -- Store client info
@@ -187,8 +187,19 @@ function Server.onClientConnect(peer)
     peer:send(welcome_data, 0, "reliable")
 
     -- Broadcast PLAYER_JOINED to all clients (including the new one, for consistency)
-    local packet = Protocol.createPlayerJoinedPacket(player_id, ship and ship.network_id or 0)
+    local player_count = 0
+    for _ in pairs(Server.clients) do
+        player_count = player_count + 1
+    end
+    if Server.world then
+        player_count = player_count + 1 -- Count the host
+    end
+    local packet = Protocol.createPlayerJoinedPacket(player_id, ship and ship.network_id or 0, player_count)
     Server.broadcast(packet)
+
+    if Server.onPlayerJoined then
+        Server.onPlayerJoined(player_id, player_count)
+    end
 end
 
 function Server.onClientReceive(peer, data)
@@ -224,7 +235,7 @@ function Server.onClientReceive(peer, data)
         end
     elseif packet.type == Protocol.PacketType.CHAT then
         -- Broadcast chat message to all clients
-        print("Server: Chat from player " .. client.player_id .. ": " .. packet.message)
+        -- Chat message received (visible in chat UI)
         local broadcast = Protocol.createChatBroadcastPacket(client.player_id, packet.message)
         Server.broadcast(broadcast)
 
@@ -239,12 +250,20 @@ function Server.setChatCallback(fn)
     Server.onChatReceived = fn
 end
 
+function Server.setPlayerJoinedCallback(fn)
+    Server.onPlayerJoined = fn
+end
+
+function Server.setPlayerLeftCallback(fn)
+    Server.onPlayerLeft = fn
+end
+
 function Server.onClientDisconnect(peer)
     local peer_id = peer:index()
     local client = Server.clients[peer_id]
 
     if client then
-        print("Client disconnected: player_id=" .. client.player_id)
+        -- Client disconnected
 
         -- Remove player entity from world
         local player = Server.players[client.player_id]
@@ -253,12 +272,25 @@ function Server.onClientDisconnect(peer)
         end
         Server.players[client.player_id] = nil
 
+        -- Remove from clients table before counting
+        Server.clients[peer_id] = nil
+
+        -- Compute current player count (all connected clients + host, if present)
+        local player_count = 0
+        for _ in pairs(Server.clients) do
+            player_count = player_count + 1
+        end
+        if Server.world then
+            player_count = player_count + 1 -- Count the host
+        end
+
         -- Broadcast PLAYER_LEFT
-        local packet = Protocol.createPlayerLeftPacket(client.player_id)
+        local packet = Protocol.createPlayerLeftPacket(client.player_id, player_count)
         Server.broadcast(packet)
 
-        -- Remove from clients table
-        Server.clients[peer_id] = nil
+        if Server.onPlayerLeft then
+            Server.onPlayerLeft(client.player_id, player_count)
+        end
     end
 end
 

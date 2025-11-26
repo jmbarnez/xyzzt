@@ -7,7 +7,7 @@ local Protocol = {}
 local debugPrintedAsteroids = {}
 
 -- Network Configuration
-Protocol.TICK_RATE = 20 -- Server updates per second (20Hz = 50ms per tick)
+Protocol.TICK_RATE = 60 -- Server updates per second (60Hz = ~16.6ms per tick)
 Protocol.TICK_INTERVAL = 1.0 / Protocol.TICK_RATE
 
 -- Packet Type Enumeration
@@ -205,8 +205,6 @@ function Protocol.createEntityState(entity)
             -- Add vertices for shape synchronization (clamped to Box2D 8-vertex limit)
             if entity.render.vertices then
                 local verts = entity.render.vertices
-                print("[SERVER] Asteroid " ..
-                    tostring(entity.network_id) .. " has vertices table with " .. tostring(#verts) .. " coords")
                 if type(verts) == "table" and #verts >= 6 and (#verts % 2 == 0) then
                     local maxCoords = 8 * 2 -- Box2D maximum: 8 vertices => 16 coordinates
                     local count = #verts
@@ -221,13 +219,7 @@ function Protocol.createEntityState(entity)
                         end
                     end
                     state.vertices_str = v_str
-                    print("[SERVER] Serialized vertices_str: " .. v_str:sub(1, 50) .. "...")
-                else
-                    print("PROTOCOL WARNING: Asteroid " ..
-                        tostring(entity.network_id) .. " has invalid vertices: " .. tostring(verts))
                 end
-            else
-                print("[SERVER] Asteroid " .. tostring(entity.network_id) .. " MISSING render.vertices!")
             end
 
             -- Add generation seed if available (for deterministic generation)

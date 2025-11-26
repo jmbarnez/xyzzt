@@ -11,7 +11,7 @@ return {
 
     -- Enemy ship configuration
     enemy_ships = {
-        enabled = true,
+        enabled = false,
         count = 3,                       -- Number of enemy ships per sector
         ship_name = "starter_drone",     -- All enemies use this ship
         -- Spatial distribution parameters

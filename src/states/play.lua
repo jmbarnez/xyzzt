@@ -222,11 +222,30 @@ function PlayState:enter(prev, param)
 
         local now = love.timer.getTime()
         if packet.server_time then
-            local offset = now - packet.server_time
+            -- Calculate offset: server_time = client_time + offset
+            -- offset = server_time - client_time
+            -- We want the LARGEST offset (closest to 0 or positive), which corresponds to the FASTEST transmission
+            -- (smallest RTT).
+            -- Actually, let's look at it this way:
+            -- server_time = client_time + offset + latency
+            -- offset = server_time - client_time - latency
+            -- Since we don't know latency per packet, we assume the packet with the
+            -- HIGHEST (server_time - client_time) value had the LOWEST latency.
+            -- (Because latency is subtracted from the ideal offset).
+
+            local offset = packet.server_time - now
+
+            -- Initialize or update if we found a "better" (higher) offset (meaning lower latency)
+            -- We also slowly decay the offset to account for clock drift or route changes
             if self.server_time_offset == nil then
                 self.server_time_offset = offset
+            elseif offset > self.server_time_offset then
+                -- Found a packet with less lag, snap to it immediately
+                self.server_time_offset = offset
             else
-                self.server_time_offset = self.server_time_offset * 0.9 + offset * 0.1
+                -- Slowly drift towards the current offset to handle clock drift
+                -- But very slowly, so we don't jitter
+                self.server_time_offset = self.server_time_offset * 0.99 + offset * 0.01
             end
         end
         local time_offset = self.server_time_offset or 0
@@ -687,8 +706,19 @@ function PlayState:enter(prev, param)
         end
     end)
 
-    Client.setPlayerJoinedCallback(function(player_id, entity_id)
-        print("Player joined: player_id=" .. player_id .. ", entity_id=" .. tostring(entity_id))
+    Client.setPlayerJoinedCallback(function(player_id, entity_id, player_count)
+        print("Player joined: player_id=" ..
+        player_id .. ", entity_id=" .. tostring(entity_id) .. ", count=" .. tostring(player_count or "?"))
+
+        local name = "Player " .. tostring(player_id)
+        if Client.player_id and player_id == Client.player_id then
+            name = "You"
+        end
+        if player_count and player_count > 0 then
+            Chat.system(string.format("%s joined the game. Players online: %d", name, player_count))
+        else
+            Chat.system(string.format("%s joined the game.", name))
+        end
 
         -- If this is our own join confirmation, track our local ship
         if entity_id and self.world.local_ship then
@@ -702,8 +732,19 @@ function PlayState:enter(prev, param)
         end
     end)
 
-    Client.setPlayerLeftCallback(function(player_id)
-        print("Player left: " .. player_id)
+    Client.setPlayerLeftCallback(function(player_id, player_count)
+        print("Player left: " .. player_id .. ", count=" .. tostring(player_count or "?"))
+
+        local name = "Player " .. tostring(player_id)
+        if Client.player_id and player_id == Client.player_id then
+            name = "You"
+        end
+        if player_count and player_count > 0 then
+            Chat.system(string.format("%s left the game. Players online: %d", name, player_count))
+        else
+            Chat.system(string.format("%s left the game.", name))
+        end
+
         -- Note: We'll need to enhance this to remove the entity from networked_entities
         -- when we have a way to map player_id to entity_id
 
@@ -970,6 +1011,24 @@ function PlayState:keypressed(key)
                     sender = "Host"
                 end
                 Chat.addMessage(sender .. ": " .. message, "text")
+            end)
+
+            Server.setPlayerJoinedCallback(function(player_id, player_count)
+                local name = "Player " .. tostring(player_id)
+                if player_count and player_count > 0 then
+                    Chat.system(string.format("%s joined the game. Players online: %d", name, player_count))
+                else
+                    Chat.system(string.format("%s joined the game.", name))
+                end
+            end)
+
+            Server.setPlayerLeftCallback(function(player_id, player_count)
+                local name = "Player " .. tostring(player_id)
+                if player_count and player_count > 0 then
+                    Chat.system(string.format("%s left the game. Players online: %d", name, player_count))
+                else
+                    Chat.system(string.format("%s left the game.", name))
+                end
             end)
 
             -- Give the host's ship a network ID so it can be synced to clients
