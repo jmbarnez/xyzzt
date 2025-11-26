@@ -7,6 +7,7 @@ local Protocol = {}
 local debugPrintedAsteroids = {}
 
 -- Network Configuration
+Protocol.VERSION = 1
 Protocol.TICK_RATE = 60 -- Server updates per second (60Hz = ~16.6ms per tick)
 Protocol.TICK_INTERVAL = 1.0 / Protocol.TICK_RATE
 
@@ -73,7 +74,8 @@ function Protocol.createWelcomePacket(player_id, entity_id)
     return {
         type = Protocol.PacketType.WELCOME,
         player_id = player_id,
-        entity_id = entity_id
+        entity_id = entity_id,
+        version = Protocol.VERSION
     }
 end
 

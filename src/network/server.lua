@@ -4,6 +4,9 @@
 local enet = require "enet"
 local Protocol = require "src.network.protocol"
 
+local MAX_INPUTS_PER_SECOND = 120
+local CHAT_WINDOW_SECONDS = 2.0
+local MAX_CHAT_PER_WINDOW = 6
 
 local Server = {
     host = nil,
@@ -15,7 +18,8 @@ local Server = {
     next_player_id = 1,
     next_network_id = 1,
     world = nil, -- Host's world (passed in)
-    players = {} -- Map of player_id -> {entity, inputs}
+    players = {}, -- Map of player_id -> {entity, inputs}
+    last_sent_states = {}
 }
 
 function Server.start(port, host_world)
@@ -71,6 +75,7 @@ function Server.stop()
     Server.players = {}
     Server.tick = 0
     Server.accumulator = 0
+    Server.last_sent_states = {}
 
     print("Server stopped")
 end
@@ -177,7 +182,11 @@ function Server.onClientConnect(peer)
     -- Store client info
     Server.clients[peer_id] = {
         peer = peer,
-        player_id = player_id
+        player_id = player_id,
+        input_window_start = 0,
+        input_count = 0,
+        chat_window_start = 0,
+        chat_count = 0
     }
 
     -- Send WELCOME packet to the new client
@@ -185,6 +194,15 @@ function Server.onClientConnect(peer)
     local welcome_packet = Protocol.createWelcomePacket(player_id, entity_id)
     local welcome_data = Protocol.serialize(welcome_packet)
     peer:send(welcome_data, 0, "reliable")
+
+    -- Send a full world snapshot to the new client so they see all entities
+    if Server.world then
+        local entities = Server.getFullWorldState()
+        local server_time = love.timer.getTime()
+        local world_packet = Protocol.createWorldStatePacket(Server.tick, entities, server_time)
+        local world_data = Protocol.serialize(world_packet)
+        peer:send(world_data, 0, "reliable")
+    end
 
     -- Broadcast PLAYER_JOINED to all clients (including the new one, for consistency)
     local player_count = 0
@@ -217,12 +235,26 @@ function Server.onClientReceive(peer, data)
 
     -- Handle packet based on type
     if packet.type == Protocol.PacketType.INPUT then
-        -- Process player input
+        local now = love.timer.getTime()
+        local window_start = client.input_window_start or 0
+        if (now - window_start) > 1.0 then
+            client.input_window_start = now
+            client.input_count = 0
+        end
+        client.input_count = (client.input_count or 0) + 1
+        if client.input_count > MAX_INPUTS_PER_SECOND then
+            return
+        end
+
+        local move_x = packet.move_x or 0
+        if move_x < -1 then move_x = -1 elseif move_x > 1 then move_x = 1 end
+        local move_y = packet.move_y or 0
+        if move_y < -1 then move_y = -1 elseif move_y > 1 then move_y = 1 end
+
         local player = Server.players[client.player_id]
         if player and player.entity and player.entity.input then
-            -- Apply inputs to entity's input component
-            player.entity.input.move_x = packet.move_x or 0
-            player.entity.input.move_y = packet.move_y or 0
+            player.entity.input.move_x = move_x
+            player.entity.input.move_y = move_y
             player.entity.input.fire = packet.fire or false
             player.entity.input.target_angle = packet.angle or 0
 
@@ -234,8 +266,17 @@ function Server.onClientReceive(peer, data)
             end
         end
     elseif packet.type == Protocol.PacketType.CHAT then
-        -- Broadcast chat message to all clients
-        -- Chat message received (visible in chat UI)
+        local now = love.timer.getTime()
+        local window_start = client.chat_window_start or 0
+        if (now - window_start) > CHAT_WINDOW_SECONDS then
+            client.chat_window_start = now
+            client.chat_count = 0
+        end
+        client.chat_count = (client.chat_count or 0) + 1
+        if client.chat_count > MAX_CHAT_PER_WINDOW then
+            return
+        end
+
         local broadcast = Protocol.createChatBroadcastPacket(client.player_id, packet.message)
         Server.broadcast(broadcast)
 
@@ -299,15 +340,44 @@ function Server.onClientDisconnect(peer)
     end
 end
 
--- Get world state snapshot for network transmission
--- Get world state snapshot for network transmission
-function Server.getWorldState()
+local function hasEntityStateChanged(prev, cur)
+    if not prev then return true end
+
+    local function diff(a, b, eps)
+        if a == nil or b == nil then
+            return a ~= b
+        end
+        return math.abs(a - b) > (eps or 0)
+    end
+
+    if diff(prev.x, cur.x, 0.5) or diff(prev.y, cur.y, 0.5) or diff(prev.r, cur.r, 0.01) then
+        return true
+    end
+
+    if diff(prev.vx, cur.vx, 0.5) or diff(prev.vy, cur.vy, 0.5) then
+        return true
+    end
+
+    if prev.sx ~= cur.sx or prev.sy ~= cur.sy then
+        return true
+    end
+
+    if prev.hp_current ~= cur.hp_current or prev.hp_max ~= cur.hp_max then
+        return true
+    end
+
+    if prev.type ~= cur.type then
+        return true
+    end
+
+    return false
+end
+
+-- Full world state snapshot (used for new clients)
+function Server.getFullWorldState()
     local entities = {}
+    local NETWORK_RANGE = 2000
 
-    -- Network culling: only send entities within range of players
-    local NETWORK_RANGE = 2000 -- Only sync entities within 2000 units
-
-    -- Get all player positions for culling
     local player_positions = {}
     for _, player_data in pairs(Server.players) do
         if player_data.entity and player_data.entity.transform then
@@ -318,7 +388,6 @@ function Server.getWorldState()
         end
     end
 
-    -- Helper function to check if entity is near any player
     local function isNearAnyPlayer(entity)
         if not entity.transform then
             return false
@@ -337,19 +406,14 @@ function Server.getWorldState()
         return false
     end
 
-    -- Gather all networkable entities in the host's world
     for _, entity in ipairs(Server.world:getEntities()) do
-        -- Always include player ships, cull other entities by distance
         local should_include = false
 
         if entity.vehicle then
-            -- Always include player ships
             should_include = true
         elseif entity.projectile then
-            -- Always include projectiles (they're fast-moving and important)
             should_include = true
         else
-            -- For asteroids and other entities, use distance culling
             should_include = isNearAnyPlayer(entity)
         end
 
@@ -362,6 +426,11 @@ function Server.getWorldState()
     end
 
     return entities
+end
+
+-- Get world state snapshot for network transmission
+function Server.getWorldState()
+    return Server.getFullWorldState()
 end
 
 function Server.broadcast(packet)

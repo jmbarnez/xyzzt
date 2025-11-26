@@ -124,6 +124,9 @@ function Client.onReceive(peer, data)
         print("Received WELCOME: player_id=" .. packet.player_id .. ", entity_id=" .. tostring(packet.entity_id))
         Client.player_id = packet.player_id
         Client.entity_id = packet.entity_id
+        if packet.version and packet.version ~= Protocol.VERSION then
+            print("WARNING: Protocol version mismatch. Server=" .. tostring(packet.version) .. ", Client=" .. tostring(Protocol.VERSION))
+        end
         if Client.onWelcome then
             Client.onWelcome(packet.player_id, packet.entity_id)
         end
