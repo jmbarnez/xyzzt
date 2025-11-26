@@ -42,14 +42,14 @@ function Interpolation.addState(buffer, server_time, x, y, r, vx, vy, angular_ve
 end
 
 -- Get interpolated state at current render time
-function Interpolation.getInterpolatedState(buffer)
+function Interpolation.getInterpolatedState(buffer, delay)
     if #buffer.states == 0 then
         return nil
     end
 
     -- Render time is slightly behind current time for smooth interpolation
     local current_time = love.timer.getTime()
-    local render_time = current_time - INTERPOLATION_DELAY
+    local render_time = current_time - (delay or INTERPOLATION_DELAY)
 
     -- If we only have one state, use it directly
     if #buffer.states == 1 then
@@ -113,6 +113,10 @@ function Interpolation.getInterpolatedState(buffer)
         angular_velocity = state_before.angular_velocity +
             (state_after.angular_velocity - state_before.angular_velocity) * alpha
     }
+end
+
+function Interpolation.getBaseDelay()
+    return INTERPOLATION_DELAY
 end
 
 -- Check if buffer is stale (no updates for too long)

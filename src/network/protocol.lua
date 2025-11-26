@@ -50,6 +50,21 @@ function Protocol.createChatBroadcastPacket(player_id, message)
     }
 end
 
+function Protocol.createPingPacket(client_time)
+    return {
+        type = Protocol.PacketType.PING,
+        client_time = client_time or (love.timer and love.timer.getTime() or 0)
+    }
+end
+
+function Protocol.createPongPacket(client_time, server_time)
+    return {
+        type = Protocol.PacketType.PONG,
+        client_time = client_time or 0,
+        server_time = server_time or (love.timer and love.timer.getTime() or 0)
+    }
+end
+
 --- Create a WELCOME packet (Server -> Client)
 --- @param player_id number Network ID
 --- @param entity_id number Entity ID in the world

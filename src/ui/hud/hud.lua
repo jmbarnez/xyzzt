@@ -3,6 +3,7 @@ local Config = require "src.config"
 local StatusPanel = require "src.ui.hud.status_panel"
 local CargoPanel = require "src.ui.hud.cargo_panel"
 local TargetPanel = require "src.ui.hud.target_panel"
+local Client = require "src.network.client"
 
 local HUD = {}
 
@@ -41,6 +42,12 @@ function HUD.draw(world, player)
             -- Local position
             local pos_text = string.format("Pos: %.0f, %.0f", ship.transform.x, ship.transform.y)
             love.graphics.print(pos_text, coord_x, coord_y + 15)
+
+            if Client.connected and Client.ping and Client.ping > 0 then
+                local ping_ms = math.floor(Client.ping + 0.5)
+                local ping_text = string.format("Ping: %d ms", ping_ms)
+                love.graphics.print(ping_text, coord_x, coord_y + 30)
+            end
         end
     end
 

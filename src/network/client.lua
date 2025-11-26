@@ -16,6 +16,9 @@ local Client = {
     entity_id = nil,
     input_interval = Protocol.TICK_INTERVAL,
     last_input_send_time = 0,
+    ping = 0,
+    ping_interval = 1.0,
+    last_ping_send_time = 0,
 
     -- Callbacks
     onWorldState = nil,
@@ -75,6 +78,17 @@ function Client.update(dt)
 
         event = Client.host:service(0)
     end
+
+    if Client.connected and Client.peer then
+        local now = love.timer.getTime()
+        local interval = Client.ping_interval or 1.0
+        if (now - Client.last_ping_send_time) >= interval then
+            Client.last_ping_send_time = now
+            local packet = Protocol.createPingPacket(now)
+            local data = Protocol.serialize(packet)
+            Client.peer:send(data, 0, "unreliable")
+        end
+    end
 end
 
 function Client.onConnect(peer)
@@ -118,7 +132,15 @@ function Client.onReceive(peer, data)
             Client.onChatBroadcast(packet.player_id, packet.message)
         end
     elseif packet.type == Protocol.PacketType.PONG then
-        -- Handle ping response
+        local now = love.timer.getTime()
+        local client_time = packet.client_time or now
+        local rtt = (now - client_time) * 1000
+        if rtt < 0 then rtt = 0 end
+        if Client.ping and Client.ping > 0 then
+            Client.ping = Client.ping * 0.9 + rtt * 0.1
+        else
+            Client.ping = rtt
+        end
     end
 end
 

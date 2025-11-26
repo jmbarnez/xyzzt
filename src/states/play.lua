@@ -897,10 +897,20 @@ function PlayState:update(dt)
 
     -- Apply interpolation for remote entities every frame (clients only)
     if not self.world.hosting then
+        local base_delay = Interpolation.getBaseDelay()
+        local interp_delay = base_delay
+        if Client.connected and Client.ping and Client.ping > 0 then
+            local ping_s = Client.ping / 1000
+            local target = ping_s * 0.5
+            if target < 0.12 then target = 0.12 end
+            if target > 0.35 then target = 0.35 end
+            interp_delay = target
+        end
+
         for id, buffer in pairs(self.world.interpolation_buffers) do
             local entity = self.world.networked_entities[id]
             if entity then
-                local interp_state = Interpolation.getInterpolatedState(buffer)
+                local interp_state = Interpolation.getInterpolatedState(buffer, interp_delay)
                 if interp_state then
                     if entity.transform then
                         entity.transform.x = interp_state.x

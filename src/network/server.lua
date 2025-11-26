@@ -243,6 +243,11 @@ function Server.onClientReceive(peer, data)
         if Server.onChatReceived then
             Server.onChatReceived(client.player_id, packet.message)
         end
+    elseif packet.type == Protocol.PacketType.PING then
+        local client_time = packet.client_time or 0
+        local pong = Protocol.createPongPacket(client_time, love.timer.getTime())
+        local data = Protocol.serialize(pong)
+        peer:send(data, 0, "unreliable")
     end
 end
 
