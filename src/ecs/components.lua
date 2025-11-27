@@ -221,3 +221,24 @@ Concord.component("level_scaling", function(c, level)
     c.level = level or 1
     c.stat_multiplier = 1 + (level - 1) * 0.15 -- 15% per level
 end)
+
+Concord.component("station")
+
+Concord.component("station_area", function(c, radius)
+    c.radius = radius or 200
+end)
+
+Concord.component("experience_reward", function(c, amount)
+    c.amount = amount or 0
+end)
+
+Concord.component("floating_text", function(c, text, x, y, duration, color)
+    c.text = text or ""
+    c.x = x or 0
+    c.y = y or 0
+    c.duration = duration or 1.0
+    c.elapsed = 0
+    c.color = color or { 1, 1, 1, 1 }
+end)
+
+

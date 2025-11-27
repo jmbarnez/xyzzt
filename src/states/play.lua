@@ -36,6 +36,8 @@ local ItemPickupSystem      = require "src.ecs.systems.gameplay.item_pickup"
 local TrailSystem           = require "src.ecs.systems.visual.trail"
 local AISystem              = require "src.ecs.systems.gameplay.ai_system"
 local DefaultSector         = require "src.data.default_sector"
+local StationManager        = require "src.ecs.spawners.station"
+local FloatingTextSystem    = require "src.ecs.systems.visual.floating_text"
 
 --
 -- LOCAL HELPER FUNCTIONS
@@ -291,7 +293,7 @@ function PlayState:initSystems()
         PlayerControlSystem, AISystem, MovementSystem, PhysicsSystem, CollisionSystem,
         WeaponSystem, ProjectileSystem, DeathSystem, ShipDeathSystem, LootSystem,
         AsteroidChunkSystem, ProjectileShardSystem, ItemPickupSystem, TrailSystem,
-        RenderSystem, MinimapSystem
+        RenderSystem, MinimapSystem, FloatingTextSystem
     )
 
     self.player = createLocalPlayer(self.world)
@@ -313,6 +315,8 @@ function PlayState:spawnInitialEntities(is_joining, snapshot)
         local player_sector_x = (ship.sector and ship.sector.x) or 0
         local player_sector_y = (ship.sector and ship.sector.y) or 0
         local seed = Config.UNIVERSE_SEED or 12345
+
+        StationManager.spawn(self.world, "starter_station", 500, 500)
         
         if DefaultSector.asteroids.enabled then
             Asteroids.spawnField(self.world, player_sector_x, player_sector_y, seed, DefaultSector.asteroids.count)

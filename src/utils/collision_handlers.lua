@@ -1,6 +1,7 @@
 local EntityUtils = require "src.utils.entity_utils"
-local ProjectileShatter = require "src.effects.projectile_shatter"
+local ProjectileShatter = require "src/effects/projectile_shatter"
 local Client = require "src.network.client"
+local FloatingTextSpawner = require "src/utils/floating_text_spawner"
 
 local CollisionHandlers = {}
 
@@ -35,10 +36,10 @@ function CollisionHandlers.handle_projectile_hit(projectile, target, world)
     -- Apply damage
     if target.vehicle and (target.hull or target.shield) then
         -- Ships (players, enemies) with hull/shield
-        EntityUtils.apply_ship_damage(target, damage)
+        EntityUtils.apply_ship_damage(target, damage, proj_comp.owner, world)
     elseif target.hp then
         -- Generic HP entities, including asteroids and chunks
-        EntityUtils.apply_damage(target, damage)
+        EntityUtils.apply_damage(target, damage, proj_comp.owner, world)
     end
 end
 
@@ -59,6 +60,12 @@ function CollisionHandlers.handle_item_pickup(item, collector)
             if (cargo.current + item_vol) <= cargo.capacity then
                 cargo.current = cargo.current + item_vol
                 cargo.items["Stone"] = (cargo.items["Stone"] or 0) + 1
+                if collector.transform then
+                    local world = collector:getWorld()
+                    if world then
+                        FloatingTextSpawner.spawn(world, "+1 " .. itemComp.name, collector.transform.x, collector.transform.y, {0, 1, 0, 1})
+                    end
+                end
             else
                 -- Cargo full
                 return 

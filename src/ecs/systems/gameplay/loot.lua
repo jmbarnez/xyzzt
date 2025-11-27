@@ -1,6 +1,7 @@
 local Concord = require "lib.concord.concord"
 local AsteroidChunkSpawner = require "src.ecs.spawners.asteroid_chunk"
 local ItemSpawners = require "src.ecs.spawners.item"
+local FloatingTextSpawner = require "src.utils.floating_text_spawner"
 local Client = require "src.network.client"
 
 local LootSystem = Concord.system({})
@@ -62,6 +63,18 @@ function LootSystem:entity_died(entity)
 
         for i = 1, amount do
             ItemSpawners.spawn_stone(world, t.x, t.y, s.x, s.y, stone_volume, stone_mass)
+        end
+
+        local hp = entity.hp
+        local killer = hp and hp.last_hit_by
+        if killer and killer.level then
+            local XP_PER_UNIT = 5
+            local reward = math.max(1, math.floor((amount or 1) * XP_PER_UNIT))
+            killer.level.xp = (killer.level.xp or 0) + reward
+            if killer.transform then
+                FloatingTextSpawner.spawn(world, "+" .. tostring(reward) .. " XP", killer.transform.x, killer.transform.y,
+                    { 1, 1, 0, 1 })
+            end
         end
     elseif entity.vehicle then
         -- Ships could drop scrap or cargo here

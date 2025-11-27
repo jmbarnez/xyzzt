@@ -112,6 +112,9 @@ function EnemySpawner.spawnEnemy(world, enemy_config, x, y, sectorX, sectorY)
     -- Add AI behavior tree
     enemy_ship:give("ai", enemy_config.behavior_tree)
 
+    -- Add experience reward
+    enemy_ship:give("experience_reward", enemy_config.level * 100)
+
     if assign_network_ids and Server then
         enemy_ship.network_id = Server.next_network_id
         Server.next_network_id = Server.next_network_id + 1

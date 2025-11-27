@@ -183,6 +183,14 @@ function RenderSystem:draw()
 
                 RenderStrategies.draw(e)
 
+                -- Draw station area
+                if e.station_area then
+                    love.graphics.push()
+                    love.graphics.setColor(0, 0.5, 1, 0.5)
+                    love.graphics.circle("line", 0, 0, e.station_area.radius, 128)
+                    love.graphics.pop()
+                end
+
                 if world and world.ui and world.ui.hover_target == e then
                     if world.debug_asteroid_overlay and e.asteroid and type(r) == "table" and r.vertices then
                         world._debug_draw_asteroid_printed = world._debug_draw_asteroid_printed or {}
