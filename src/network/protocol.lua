@@ -109,13 +109,15 @@ end
 --- @param tick number Server tick number
 --- @param entities table Array of entity states
 --- @param server_time number Server timestamp (optional, defaults to love.timer.getTime())
+--- @param removed_ids table|nil List of entity IDs that were removed or left relevance
 --- @return table packet
-function Protocol.createWorldStatePacket(tick, entities, server_time)
+function Protocol.createWorldStatePacket(tick, entities, server_time, removed_ids)
     return {
         type = Protocol.PacketType.WORLD_STATE,
         tick = tick,
         entities = entities or {},
-        server_time = server_time or (love.timer and love.timer.getTime() or 0)
+        server_time = server_time or (love.timer and love.timer.getTime() or 0),
+        removed_ids = removed_ids
     }
 end
 

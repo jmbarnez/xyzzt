@@ -250,7 +250,7 @@ function PlayState:enter(prev, param)
         end
         local time_offset = self.server_time_offset or 0
 
-        -- Track which network IDs were received in this packet
+        -- Track which network IDs were received in this packet (for diagnostics / future use)
         local received_ids = {}
 
         -- Apply world state to entities (CLIENTS ONLY)
@@ -272,9 +272,9 @@ function PlayState:enter(prev, param)
                         local dist_sq = dx * dx + dy * dy
 
                         local snap_dist = Config.RECONCILE_SNAP_DISTANCE or 150
-                        local threshold = snap_dist * snap_dist
+                        local hard_threshold = snap_dist * snap_dist
 
-                        if dist_sq > threshold then
+                        if dist_sq > hard_threshold then
                             -- Hard snap to server position only when error is very large
                             entity.transform.x = state.x
                             entity.transform.y = state.y
@@ -284,6 +284,28 @@ function PlayState:enter(prev, param)
 
                                 if state.vx and state.vy then
                                     entity.physics.body:setLinearVelocity(state.vx, state.vy)
+                                end
+                            end
+                        else
+                            -- Softly blend towards server state to reduce small jitters
+                            local blend = 0.1
+                            local target_x, target_y = state.x, state.y
+
+                            entity.transform.x = entity.transform.x + (target_x - entity.transform.x) * blend
+                            entity.transform.y = entity.transform.y + (target_y - entity.transform.y) * blend
+
+                            if entity.physics and entity.physics.body and not entity.physics.body:isDestroyed() then
+                                local body = entity.physics.body
+                                local bx, by = body:getPosition()
+                                local new_x = bx + (target_x - bx) * blend
+                                local new_y = by + (target_y - by) * blend
+                                body:setPosition(new_x, new_y)
+
+                                if state.vx and state.vy then
+                                    local bvx, bvy = body:getLinearVelocity()
+                                    local new_vx = bvx + (state.vx - bvx) * blend
+                                    local new_vy = bvy + (state.vy - bvy) * blend
+                                    body:setLinearVelocity(new_vx, new_vy)
                                 end
                             end
                         end
@@ -678,29 +700,39 @@ function PlayState:enter(prev, param)
             end
         end
 
-        -- Prune entities that were not received in this update (destroyed on server)
-        -- This prevents stale entities from lingering and causing issues like health rebounding
-        local entities_to_remove = {}
-        for net_id, entity in pairs(self.world.networked_entities) do
-            -- Don't remove our own ship or entities that were in this packet
-            if not received_ids[net_id] and net_id ~= self.my_entity_id then
-                table.insert(entities_to_remove, net_id)
+        -- Removals
+        if packet.removed_ids then
+            -- Delta world state: server explicitly tells us which entities were removed
+            local removed_ids = packet.removed_ids
+            for _, net_id in ipairs(removed_ids) do
+                if net_id ~= self.my_entity_id then
+                    local entity = self.world.networked_entities[net_id]
+                    if entity then
+                        EntityUtils.cleanup_physics_entity(entity)
+                        self.world.networked_entities[net_id] = nil
+                        if self.world.interpolation_buffers then
+                            self.world.interpolation_buffers[net_id] = nil
+                        end
+                    end
+                end
             end
-        end
+        else
+            -- Full snapshot (e.g. on join): treat missing entities as despawned
+            local entities_to_remove = {}
+            for net_id, entity in pairs(self.world.networked_entities) do
+                if not received_ids[net_id] and net_id ~= self.my_entity_id then
+                    table.insert(entities_to_remove, net_id)
+                end
+            end
 
-        -- Remove stale entities
-        for _, net_id in ipairs(entities_to_remove) do
-            local entity = self.world.networked_entities[net_id]
-            if entity then
-                -- Clean up physics body
-                EntityUtils.cleanup_physics_entity(entity)
-
-                -- Remove from tracking
-                self.world.networked_entities[net_id] = nil
-
-                -- Remove interpolation buffer
-                if self.world.interpolation_buffers then
-                    self.world.interpolation_buffers[net_id] = nil
+            for _, net_id in ipairs(entities_to_remove) do
+                local entity = self.world.networked_entities[net_id]
+                if entity then
+                    EntityUtils.cleanup_physics_entity(entity)
+                    self.world.networked_entities[net_id] = nil
+                    if self.world.interpolation_buffers then
+                        self.world.interpolation_buffers[net_id] = nil
+                    end
                 end
             end
         end
@@ -901,16 +933,24 @@ function PlayState:update(dt)
         local interp_delay = base_delay
         if Client.connected and Client.ping and Client.ping > 0 then
             local ping_s = Client.ping / 1000
-            local target = ping_s * 0.5
-            if target < 0.12 then target = 0.12 end
-            if target > 0.35 then target = 0.35 end
-            interp_delay = target
+            local dynamic = ping_s * 0.5
+
+            -- Never go below the base delay; only increase smoothing for higher pings
+            if dynamic < base_delay then dynamic = base_delay end
+            if dynamic > 0.35 then dynamic = 0.35 end
+
+            interp_delay = dynamic
         end
 
         for id, buffer in pairs(self.world.interpolation_buffers) do
             local entity = self.world.networked_entities[id]
             if entity then
-                local interp_state = Interpolation.getInterpolatedState(buffer, interp_delay)
+                local effective_delay = interp_delay
+                if entity.vehicle and id ~= self.my_entity_id then
+                    effective_delay = effective_delay + 0.03
+                end
+
+                local interp_state = Interpolation.getInterpolatedState(buffer, effective_delay)
                 if interp_state then
                     if entity.transform then
                         entity.transform.x = interp_state.x

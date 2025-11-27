@@ -98,9 +98,9 @@ function Server.update(dt)
         -- We just broadcast the current state to clients.
 
         -- Broadcast world state
-        local entities = Server.getWorldState()
+        local entities, removed_ids = Server.getWorldState()
         local server_time = love.timer.getTime()
-        local packet = Protocol.createWorldStatePacket(Server.tick, entities, server_time)
+        local packet = Protocol.createWorldStatePacket(Server.tick, entities, server_time, removed_ids)
         Server.broadcast(packet)
 
         Server.accumulator = Server.accumulator - Protocol.TICK_INTERVAL
@@ -430,7 +430,72 @@ end
 
 -- Get world state snapshot for network transmission
 function Server.getWorldState()
-    return Server.getFullWorldState()
+    local entities = {}
+    local new_states = {}
+    local removed_ids = {}
+
+    local NETWORK_RANGE = 2000
+
+    local player_positions = {}
+    for _, player_data in pairs(Server.players) do
+        if player_data.entity and player_data.entity.transform then
+            table.insert(player_positions, {
+                x = player_data.entity.transform.x,
+                y = player_data.entity.transform.y
+            })
+        end
+    end
+
+    local function isNearAnyPlayer(entity)
+        if not entity.transform then
+            return false
+        end
+
+        for _, player_pos in ipairs(player_positions) do
+            local dx = entity.transform.x - player_pos.x
+            local dy = entity.transform.y - player_pos.y
+            local dist_sq = dx * dx + dy * dy
+
+            if dist_sq <= NETWORK_RANGE * NETWORK_RANGE then
+                return true
+            end
+        end
+
+        return false
+    end
+
+    for _, entity in ipairs(Server.world:getEntities()) do
+        local should_include = false
+
+        if entity.vehicle then
+            should_include = true
+        elseif entity.projectile then
+            should_include = true
+        else
+            should_include = isNearAnyPlayer(entity)
+        end
+
+        if should_include and entity.network_id then
+            local state = Protocol.createEntityState(entity)
+            if state then
+                new_states[state.id] = state
+                local prev = Server.last_sent_states[state.id]
+                if hasEntityStateChanged(prev, state) then
+                    table.insert(entities, state)
+                end
+            end
+        end
+    end
+
+    -- Anything we previously sent but is no longer in range / no longer exists
+    for id, _ in pairs(Server.last_sent_states) do
+        if not new_states[id] then
+            table.insert(removed_ids, id)
+        end
+    end
+
+    Server.last_sent_states = new_states
+    return entities, removed_ids
 end
 
 function Server.broadcast(packet)
