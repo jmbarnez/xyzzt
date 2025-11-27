@@ -282,6 +282,7 @@ local function spawnNetworkEntity(self, state, is_me)
             local fixture = love.physics.newFixture(body, shape, 0.1)
             fixture:setRestitution(0)
             fixture:setSensor(true)
+            fixture:setGroupIndex(-1)
             fixture:setUserData(entity)
             entity:give("physics", body, shape, fixture)
             if state.vx and state.vy then body:setLinearVelocity(state.vx, state.vy) end

@@ -15,10 +15,6 @@ function CollisionHandlers.handle_projectile_hit(projectile, target, world)
         return
     end
 
-    -- Get damage
-    -- Mark projectile as hit; ProjectileSystem will handle shatter + cleanup
-    proj_comp.hit_something = true
-
     local is_pure_client = (world and not world.hosting and Client.connected)
     local is_local_owner = (world and world.local_ship and proj_comp.owner == world.local_ship)
 
@@ -26,11 +22,15 @@ function CollisionHandlers.handle_projectile_hit(projectile, target, world)
         return
     end
 
+    -- Get damage
     local damage = proj_comp.damage or 0
 
     if damage <= 0 then
         return
     end
+
+    -- Mark projectile as hit; ProjectileSystem will handle shatter + cleanup
+    proj_comp.hit_something = true
 
     -- Apply damage
     if target.vehicle and (target.hull or target.shield) then
