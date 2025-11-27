@@ -437,6 +437,12 @@ function ProceduralShip.generate(seed)
         })
     end
 
+    -- Weapon mounts for weapon component (strip type field)
+    local weapon_mounts = {}
+    for _, hp in ipairs(weapon_hardpoints) do
+        table.insert(weapon_mounts, { x = hp.x, y = hp.y })
+    end
+
     return {
         name = "Unknown Ship",
         type = "procedural",
@@ -457,6 +463,13 @@ function ProceduralShip.generate(seed)
         max_hull = max_hull,
         max_shield = max_shield,
         shield_regen = 5,
+
+        -- Loadout / capacity
+        weapon_name = "pulse_laser",
+        weapon_mounts = weapon_mounts,
+        cargo_capacity = 50,
+        magnet_radius = 100,
+        magnet_force = 20,
 
         engine_mounts = engine_mounts,
 

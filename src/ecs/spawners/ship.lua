@@ -74,10 +74,21 @@ function ShipManager.spawn(world, ship_def, x, y, is_host_player)
     ship:give("trail", engine_mounts)
 
     ship:give("input")
-    ship:give("weapon", "pulse_laser", data.weapon_mounts or { { x = data.radius, y = 0 } })
+
+    -- Weapon configuration from ship definition (with safe defaults)
+    local weapon_name = data.weapon_name or "pulse_laser"
+    local weapon_mounts = data.weapon_mounts or { { x = data.radius, y = 0 } }
+    ship:give("weapon", weapon_name, weapon_mounts)
+
     ship:give("level")
-    ship:give("cargo", 50)
-    ship:give("magnet", 100, 20)
+
+    -- Cargo and tractor/magnet stats from ship definition (with defaults)
+    local cargo_capacity = data.cargo_capacity or 50
+    ship:give("cargo", cargo_capacity)
+
+    local magnet_radius = data.magnet_radius or 100
+    local magnet_force = data.magnet_force or 20
+    ship:give("magnet", magnet_radius, magnet_force)
 
     return ship
 end

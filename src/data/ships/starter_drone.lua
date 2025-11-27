@@ -9,9 +9,16 @@ return {
     restitution = 0.2,
     radius = 10,
 
+    -- Weapon / Equipment
+    weapon_name = "pulse_laser",
+
     weapon_mounts = {
         { x = 12, y = 0 },
     },
+
+    cargo_capacity = 50,
+    magnet_radius = 100,
+    magnet_force = 20,
 
     -- Vehicle Stats
     thrust = Config.THRUST,
