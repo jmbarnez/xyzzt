@@ -16,7 +16,9 @@ function CollisionHandlers.handle_projectile_hit(projectile, target, world)
     proj_comp.hit_something = true
 
     local is_pure_client = (world and not world.hosting and Client.connected)
-    if is_pure_client then
+    local is_local_owner = (world and world.local_ship and proj_comp.owner == world.local_ship)
+
+    if is_pure_client and not is_local_owner then
         return
     end
 

@@ -13,6 +13,7 @@ local Interpolation = require "src.network.interpolation"
 local EntityUtils   = require "src.utils.entity_utils"
 local Client        = require "src.network.client"
 local Protocol      = require "src.network.protocol"
+local PlayNetwork   = require "src.states.play_network"
 
 require "src.ecs.components"
 
@@ -271,40 +272,7 @@ function PlayState:initUI()
 end
 
 function PlayState:initNetwork(is_joining, join_host)
-    Chat.init()
-    Chat.enable()
-
-    -- Setup Chat Network Handlers
-    Chat.setSendHandler(function(message)
-        if Client.connected then
-            Client.sendChatMessage(message)
-        elseif self.world.hosting and self.world.server then
-            local Server = self.world.server
-            Chat.addMessage("You: " .. message, "text")
-            local packet = Protocol.createChatBroadcastPacket(0, message)
-            Server.broadcast(packet)
-        else
-            Chat.addMessage("You: " .. message, "text")
-        end
-    end)
-
-    Client.setChatCallback(function(player_id, message)
-        local sender = (Client.player_id and player_id == Client.player_id) and "You" or ("Player " .. player_id)
-        Chat.addMessage(sender .. ": " .. message, "text")
-    end)
-
-    -- Setup Game Network Handlers
-    Client.setWorldStateCallback(function(packet) self:handleWorldState(packet) end)
-    Client.setPlayerJoinedCallback(function(...) self:handlePlayerJoined(...) end)
-    Client.setPlayerLeftCallback(function(...) self:handlePlayerLeft(...) end)
-    Client.setWelcomeCallback(function(...) self:handleWelcome(...) end)
-
-    if is_joining then
-        Client.server_address = join_host
-        Client.connect()
-    else
-        Client.server_address = "localhost"
-    end
+    PlayNetwork.initNetwork(self, is_joining, join_host)
 end
 
 function PlayState:initSystems()
@@ -663,6 +631,7 @@ function PlayState:spawnNetworkEntity(state, is_me)
             local fixture = love.physics.newFixture(body, shape, 0.1)
             fixture:setRestitution(0)
             fixture:setSensor(true)
+            fixture:setGroupIndex(-1)
             fixture:setUserData(entity)
             entity:give("physics", body, shape, fixture)
             if state.vx and state.vy then body:setLinearVelocity(state.vx, state.vy) end
@@ -774,11 +743,7 @@ end
 --
 
 function PlayState:updateNetwork(dt)
-    if self.world.hosting then
-        local Server = require "src.network.server"
-        Server.update(dt)
-    end
-    Client.update(dt)
+    PlayNetwork.updateNetwork(self, dt)
 end
 
 function PlayState:updateControls()
@@ -790,45 +755,11 @@ function PlayState:updateControls()
 end
 
 function PlayState:updateInterpolation(dt)
-    -- Calculate Delay
-    local delay = Interpolation.getBaseDelay()
-    if Client.connected and Client.ping and Client.ping > 0 then
-        local dynamic = (Client.ping / 1000) * 0.5
-        delay = math.max(delay, math.min(dynamic, 0.35))
-    end
-
-    for id, buffer in pairs(self.world.interpolation_buffers) do
-        local entity = self.world.networked_entities[id]
-        if entity then
-            local effective_delay = delay + ((entity.vehicle and id ~= self.my_entity_id) and 0.03 or 0)
-            local state = Interpolation.getInterpolatedState(buffer, effective_delay)
-            
-            if state then
-                if entity.transform then
-                    entity.transform.x, entity.transform.y, entity.transform.r = state.x, state.y, state.r
-                end
-                if entity.physics and entity.physics.body and not entity.physics.body:isDestroyed() then
-                    entity.physics.body:setPosition(state.x, state.y)
-                    entity.physics.body:setAngle(state.r)
-                    if state.vx and state.vy then entity.physics.body:setLinearVelocity(state.vx, state.vy) end
-                    if state.angular_velocity then entity.physics.body:setAngularVelocity(state.angular_velocity) end
-                end
-            end
-        elseif Interpolation.isStale(buffer) then
-             self.world.interpolation_buffers[id] = nil
-        end
-    end
+    PlayNetwork.updateInterpolation(self, dt)
 end
 
 function PlayState:sendClientInput()
-    if not self.world.hosting and Client.connected and self.world.local_ship and self.world.local_ship.input then
-        local input = self.world.local_ship.input
-        local t = self.world.local_ship.transform
-        Client.sendInput(
-            input.move_x or 0, input.move_y or 0, input.fire or false, input.target_angle or 0,
-            t.x, t.y, t.r
-        )
-    end
+    PlayNetwork.sendClientInput(self)
 end
 
 function PlayState:updateHover()
@@ -876,32 +807,7 @@ function PlayState:respawnLocalPlayer()
 end
 
 function PlayState:startHosting()
-    local Server = require "src.network.server"
-    if Server.start(25565, self.world) then
-        self.world.hosting = true
-        self.world.server = Server
-        print("Hosting server on port 25565")
-        
-        -- Hook up Server-side chat
-        Server.setChatCallback(function(pid, msg)
-            local sender = (pid == 0) and "Host" or ("Player " .. pid)
-            Chat.addMessage(sender .. ": " .. msg, "text")
-        end)
-        
-        -- Sync host ship
-        if self.world.local_ship then
-            self.world.local_ship.network_id = Server.next_network_id
-            Server.next_network_id = Server.next_network_id + 1
-        end
-        
-        -- Sync existing entities
-        for _, e in ipairs(self.world:getEntities()) do
-            if (e.asteroid or e.asteroid_chunk or e.projectile or e.vehicle or e.item) and not e.network_id then
-                e.network_id = Server.next_network_id
-                Server.next_network_id = Server.next_network_id + 1
-            end
-        end
-    end
+    PlayNetwork.startHosting(self)
 end
 
 return PlayState

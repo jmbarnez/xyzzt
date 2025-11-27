@@ -160,6 +160,7 @@ function WeaponSystem:update(dt)
                 local fixture = love.physics.newFixture(body, shape, mass)
                 fixture:setRestitution(0)
                 fixture:setSensor(true) -- Make sensor so it doesn't physically collide
+                fixture:setGroupIndex(-1)
                 projectile:give("physics", body, shape, fixture)
                 fixture:setUserData(projectile)
 

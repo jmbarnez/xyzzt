@@ -171,6 +171,11 @@ function Server.onClientConnect(peer)
             inputs = { move_x = 0, move_y = 0, fire = false }
         }
 
+        -- Ensure the host can see a nametag for this player's ship
+        if not ship.name then
+            ship:give("name", "Player " .. player_id)
+        end
+
         -- Mark as remote player (different color)
         if ship.render then
             ship.render.color = { 1, 0.5, 0.2 } -- Orange for remote players
