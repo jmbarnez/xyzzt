@@ -55,6 +55,9 @@ Concord.component("render", function(c, arg)
             if arg.seed then
                 c.seed = arg.seed
             end
+            if arg.render_data then
+                c.render_data = arg.render_data
+            end
         else
             c.color = arg
         end
