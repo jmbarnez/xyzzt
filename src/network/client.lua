@@ -26,6 +26,10 @@ local Client = {
     onPlayerLeft = nil,
     onWelcome = nil,
     onChatBroadcast = nil,
+    onPlayerInfo = nil,
+
+    -- Game metadata
+    display_name = nil,
 }
 
 function Client.connect()
@@ -95,6 +99,9 @@ function Client.onConnect(peer)
     print("Connected to server!")
     Client.connected = true
     Client.connecting = false
+
+    -- Send initial player info (e.g. display name) if available
+    Client.sendPlayerInfo()
 end
 
 function Client.onReceive(peer, data)
@@ -133,6 +140,10 @@ function Client.onReceive(peer, data)
     elseif packet.type == Protocol.PacketType.CHAT_BROADCAST then
         if Client.onChatBroadcast then
             Client.onChatBroadcast(packet.player_id, packet.message)
+        end
+    elseif packet.type == Protocol.PacketType.PLAYER_INFO then
+        if Client.onPlayerInfo then
+            Client.onPlayerInfo(packet.player_id, packet.name)
         end
     elseif packet.type == Protocol.PacketType.PONG then
         local now = love.timer.getTime()
@@ -175,6 +186,17 @@ function Client.sendInput(move_x, move_y, fire, angle, pos_x, pos_y, rotation)
     local data = Protocol.serialize(packet)
 
     Client.peer:send(data, 0, "reliable") -- Channel 0, reliable delivery
+end
+
+function Client.sendPlayerInfo()
+    if not Client.connected or not Client.peer or not Client.display_name then
+        return
+    end
+
+    local packet = Protocol.createPlayerInfoPacket(nil, Client.display_name)
+    local data = Protocol.serialize(packet)
+
+    Client.peer:send(data, 0, "reliable")
 end
 
 function Client.sendChatMessage(message)
@@ -225,6 +247,10 @@ end
 
 function Client.setChatCallback(fn)
     Client.onChatBroadcast = fn
+end
+
+function Client.setPlayerInfoCallback(fn)
+    Client.onPlayerInfo = fn
 end
 
 return Client

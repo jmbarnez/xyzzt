@@ -18,7 +18,7 @@ local Server = {
     next_player_id = 1,
     next_network_id = 1,
     world = nil, -- Host's world (passed in)
-    players = {}, -- Map of player_id -> {entity, inputs}
+    players = {}, -- Map of player_id -> {entity, inputs, display_name}
     last_sent_states = {}
 }
 
@@ -165,16 +165,12 @@ function Server.onClientConnect(peer)
         ship.network_id = Server.next_network_id
         Server.next_network_id = Server.next_network_id + 1
 
-        -- Track player
+        -- Track player (display_name filled in once we receive PLAYER_INFO)
         Server.players[player_id] = {
             entity = ship,
-            inputs = { move_x = 0, move_y = 0, fire = false }
+            inputs = { move_x = 0, move_y = 0, fire = false },
+            display_name = nil,
         }
-
-        -- Ensure the host can see a nametag for this player's ship
-        if not ship.name then
-            ship:give("name", "Player " .. player_id)
-        end
 
         -- Mark as remote player (different color)
         if ship.render then
@@ -288,6 +284,33 @@ function Server.onClientReceive(peer, data)
         -- Notify Host (if callback set)
         if Server.onChatReceived then
             Server.onChatReceived(client.player_id, packet.message)
+        end
+    elseif packet.type == Protocol.PacketType.PLAYER_INFO then
+        local name = packet.name
+        if type(name) ~= "string" or name == "" then
+            name = "Player " .. tostring(client.player_id)
+        end
+
+        client.display_name = name
+
+        local player = Server.players[client.player_id]
+        if player then
+            player.display_name = name
+            local ship = player.entity
+            if ship and ship.vehicle then
+                if ship.name then
+                    ship.name.value = name
+                else
+                    ship:give("name", name)
+                end
+            end
+        end
+
+        -- Broadcast this player info to all connected clients
+        local info_packet = Protocol.createPlayerInfoPacket(client.player_id, name)
+        local info_data = Protocol.serialize(info_packet)
+        for _, c in pairs(Server.clients) do
+            c.peer:send(info_data, 0, "reliable")
         end
     elseif packet.type == Protocol.PacketType.PING then
         local client_time = packet.client_time or 0

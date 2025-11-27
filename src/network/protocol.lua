@@ -17,6 +17,7 @@ Protocol.PacketType = {
     INPUT = 1,
     PING = 2,
     CHAT = 3, -- New: Chat message
+    PLAYER_INFO = 4, -- Client display name / metadata
 
     -- Server -> Client
     WORLD_STATE = 10,
@@ -36,6 +37,20 @@ function Protocol.createChatPacket(message)
     return {
         type = Protocol.PacketType.CHAT,
         message = message
+    }
+end
+
+--- Create a PLAYER_INFO packet
+--- When sent Client -> Server, player_id may be nil (server infers from connection)
+--- When sent Server -> Client, player_id is the authoritative network player id
+--- @param player_id number|nil
+--- @param name string
+--- @return table packet
+function Protocol.createPlayerInfoPacket(player_id, name)
+    return {
+        type = Protocol.PacketType.PLAYER_INFO,
+        player_id = player_id,
+        name = name,
     }
 end
 

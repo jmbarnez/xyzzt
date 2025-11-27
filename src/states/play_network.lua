@@ -23,6 +23,26 @@ local function syncServerTime(self, server_time)
     end
 end
 
+function PlayNetwork.handlePlayerInfo(self, player_id, name)
+    if not player_id or not name or name == "" then return end
+
+    self.player_display_names = self.player_display_names or {}
+    self.player_display_names[player_id] = name
+
+    -- If we already know which entity belongs to this player, update its name now
+    local entity_id = self.player_entity_ids and self.player_entity_ids[player_id]
+    if entity_id and self.world and self.world.networked_entities then
+        local entity = self.world.networked_entities[entity_id]
+        if entity and entity.vehicle and not entity.ai then
+            if entity.name then
+                entity.name.value = name
+            else
+                entity:give("name", name)
+            end
+        end
+    end
+end
+
 local function reconcileLocalPlayer(self, entity, state)
     if not entity.transform then return end
 
@@ -125,10 +145,12 @@ local function spawnNetworkEntity(self, state, is_me)
     local entity
 
     if state.type == "vehicle" then
-        local ship_def = "starter_drone"
+        local ship_def
         if state.render_type == "procedural" and state.render_seed then
             local ProceduralShip = require "src.utils.procedural_ship"
             ship_def = ProceduralShip.generate(state.render_seed)
+        else
+            ship_def = "starter_drone"
         end
 
         entity = ShipSystem.spawn(self.world, ship_def, state.x, state.y, is_me)
@@ -174,7 +196,7 @@ local function spawnNetworkEntity(self, state, is_me)
 
             local shape
             if vertices and #vertices >= 6 then
-                local verts = (#vertices > 16) and {unpack(vertices, 1, 16)} or vertices
+                local verts = (#vertices > 16) and {table.unpack(vertices, 1, 16)} or vertices
                 pcall(function() shape = love.physics.newPolygonShape(verts) end)
             end
             if not shape then shape = love.physics.newCircleShape(state.radius or 30) end
@@ -216,7 +238,7 @@ local function spawnNetworkEntity(self, state, is_me)
 
             local shape
             if vertices and #vertices >= 6 then
-                local verts = (#vertices > 16) and {unpack(vertices, 1, 16)} or vertices
+                local verts = (#vertices > 16) and {table.unpack(vertices, 1, 16)} or vertices
                 pcall(function() shape = love.physics.newPolygonShape(verts) end)
             end
             if not shape then shape = love.physics.newCircleShape(state.radius or 8) end
@@ -325,8 +347,26 @@ local function assignPlayerName(self, entity, entity_id)
     end
 
     if owner_id then
-        local label = (Client.player_id and owner_id == Client.player_id) and (Config.PLAYER_NAME or "Player") or ("Player " .. owner_id)
-        entity:give("name", label)
+        self.player_display_names = self.player_display_names or {}
+        local display = self.player_display_names[owner_id]
+
+        local label
+        if type(display) == "string" and display ~= "" then
+            label = display
+        else
+            -- Fallbacks: local player uses their Config.PLAYER_NAME, others get a generic label
+            if Client.player_id and owner_id == Client.player_id then
+                label = Config.PLAYER_NAME or "Player"
+            else
+                label = "Player " .. owner_id
+            end
+        end
+
+        if entity.name then
+            entity.name.value = label
+        else
+            entity:give("name", label)
+        end
     end
 end
 
@@ -373,10 +413,14 @@ function PlayNetwork.initNetwork(self, is_joining, join_host)
         Chat.addMessage(sender .. ": " .. message, "text")
     end)
 
+    -- Ensure the low-level client knows our display name
+    Client.display_name = Config.PLAYER_NAME or "Player"
+
     Client.setWorldStateCallback(function(packet) PlayNetwork.handleWorldState(self, packet) end)
     Client.setPlayerJoinedCallback(function(...) PlayNetwork.handlePlayerJoined(self, ...) end)
     Client.setPlayerLeftCallback(function(...) PlayNetwork.handlePlayerLeft(self, ...) end)
     Client.setWelcomeCallback(function(...) PlayNetwork.handleWelcome(self, ...) end)
+    Client.setPlayerInfoCallback(function(...) PlayNetwork.handlePlayerInfo(self, ...) end)
 
     if is_joining then
         Client.server_address = join_host
