@@ -27,7 +27,9 @@ function CollisionHandlers.handle_projectile_hit(projectile, target, world)
         return
     end
 
-    if target.hp then
+    if target.vehicle and (target.hull or target.shield) then
+        EntityUtils.apply_ship_damage(target, damage)
+    elseif target.hp then
         EntityUtils.apply_damage(target, damage)
     end
 end

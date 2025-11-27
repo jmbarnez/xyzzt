@@ -12,6 +12,90 @@ local function pointInRect(x, y, rect)
     return x >= rect.x and x <= rect.x + rect.w and y >= rect.y and y <= rect.y + rect.h
 end
 
+local nameAdjectives = {
+    "Swift",
+    "Crimson",
+    "Silent",
+    "Luminous",
+    "Iron",
+    "Void",
+    "Solar",
+    "Nebula",
+}
+
+local nameNouns = {
+    "Ranger",
+    "Voyager",
+    "Drifter",
+    "Phoenix",
+    "Comet",
+    "Warden",
+    "Nomad",
+    "Specter",
+}
+
+local function randomFrom(list)
+    return list[math.random(1, #list)]
+end
+
+local function generateRandomDisplayName()
+    return randomFrom(nameAdjectives) .. " " .. randomFrom(nameNouns)
+end
+
+local function getJoinDialogLayout()
+    local sw, sh = love.graphics.getDimensions()
+    local boxWidth = 420
+    local boxHeight = 250
+    local boxX = (sw - boxWidth) / 2
+    local boxY = (sh - boxHeight) / 2
+
+    local labelFont = Theme.getFont("button")
+    local labelH = labelFont:getHeight()
+
+    local titleY = boxY + 20
+    local ipLabelY = titleY + labelH + 10
+    local ipY = ipLabelY + labelH + 6
+    local nameLabelY = ipY + labelH + 16
+    local nameY = nameLabelY + labelH + 6
+
+    local ipRect = {
+        x = boxX + 20,
+        y = ipY,
+        w = boxWidth - 40,
+        h = 40,
+    }
+
+    local nameRect = {
+        x = boxX + 20,
+        y = nameY,
+        w = boxWidth - 180,
+        h = 40,
+    }
+
+    local randomBtnWidth = 140
+    local randomBtnHeight = 40
+    local randomRect = {
+        x = boxX + boxWidth - randomBtnWidth - 20,
+        y = nameY,
+        w = randomBtnWidth,
+        h = randomBtnHeight,
+    }
+
+    return {
+        boxX = boxX,
+        boxY = boxY,
+        boxWidth = boxWidth,
+        boxHeight = boxHeight,
+        titleY = titleY,
+        ipLabelY = ipLabelY,
+        nameLabelY = nameLabelY,
+        instructionsY = boxY + boxHeight - 40,
+        ipRect = ipRect,
+        nameRect = nameRect,
+        randomRect = randomRect,
+    }
+end
+
 local MenuState = {}
 
 function MenuState:enter()
@@ -42,8 +126,10 @@ function MenuState:enter()
             action = function()
                 self.ip_input_mode = true
                 self.ip_input = "localhost"
+                self.display_name_input = Config.PLAYER_NAME or "Pilot"
                 self.cursor_blink_time = 0
                 self.cursor_visible = true
+                self.active_join_input = "ip"
             end,
         },
         {
@@ -64,8 +150,10 @@ function MenuState:enter()
     -- IP Input state
     self.ip_input_mode = false
     self.ip_input = "localhost"
+    self.display_name_input = Config.PLAYER_NAME or "Pilot"
     self.cursor_blink_time = 0
     self.cursor_visible = true
+    self.active_join_input = "ip"
 end
 
 function MenuState:update(dt)
@@ -105,6 +193,19 @@ function MenuState:update(dt)
     end
 
     local isDown = love.mouse.isDown(1)
+
+    if self.ip_input_mode then
+        local layout = getJoinDialogLayout()
+        if isDown and not self.mouseWasDown then
+            if pointInRect(mouseX, mouseY, layout.ipRect) then
+                self.active_join_input = "ip"
+            elseif pointInRect(mouseX, mouseY, layout.nameRect) then
+                self.active_join_input = "name"
+            elseif pointInRect(mouseX, mouseY, layout.randomRect) then
+                self.display_name_input = generateRandomDisplayName()
+            end
+        end
+    end
 
     -- Only process button clicks when dialog is NOT open
     if not self.ip_input_mode then
@@ -227,45 +328,96 @@ function MenuState:draw()
         love.graphics.setColor(0, 0, 0, 0.7)
         love.graphics.rectangle("fill", 0, 0, sw, sh)
 
-        -- Draw input box
-        local boxWidth = 400
-        local boxHeight = 150
-        local boxX = (sw - boxWidth) / 2
-        local boxY = (sh - boxHeight) / 2
+        local layout = getJoinDialogLayout()
+        local boxX = layout.boxX
+        local boxY = layout.boxY
+        local boxWidth = layout.boxWidth
+        local boxHeight = layout.boxHeight
+        local rounding = Theme.shapes.buttonRounding or 0
+        local outlineWidth = Theme.shapes.outlineWidth or 1.5
 
-        love.graphics.setColor(0.1, 0.1, 0.15, 0.95)
-        love.graphics.rectangle("fill", boxX, boxY, boxWidth, boxHeight, 8, 8)
-        love.graphics.setColor(0.4, 0.6, 1, 1)
-        love.graphics.rectangle("line", boxX, boxY, boxWidth, boxHeight, 8, 8)
+        local bgColor = Theme.getBackgroundColor()
+        local buttonColors = Theme.colors.button
+        local textPrimary = Theme.colors.textPrimary
+        local textMuted = Theme.colors.textMuted
+
+        love.graphics.setColor(bgColor)
+        love.graphics.rectangle("fill", boxX, boxY, boxWidth, boxHeight, rounding, rounding)
+        love.graphics.setLineWidth(outlineWidth)
+        love.graphics.setColor(buttonColors.outline)
+        love.graphics.rectangle("line", boxX, boxY, boxWidth, boxHeight, rounding, rounding)
 
         -- Draw title
-        love.graphics.setColor(1, 1, 1, 1)
+        love.graphics.setColor(textPrimary)
         love.graphics.setFont(self.fontButton)
-        love.graphics.printf("Enter Server IP", boxX, boxY + 20, boxWidth, "center")
+        love.graphics.printf("Join Game", boxX, layout.titleY, boxWidth, "center")
 
-        -- Draw input field
-        local inputY = boxY + 60
-        love.graphics.setColor(0.05, 0.05, 0.1, 1)
-        love.graphics.rectangle("fill", boxX + 20, inputY, boxWidth - 40, 40, 4, 4)
-        love.graphics.setColor(0.6, 0.8, 1, 1)
-        love.graphics.rectangle("line", boxX + 20, inputY, boxWidth - 40, 40, 4, 4)
+        -- Draw IP label and field
+        love.graphics.setColor(textMuted)
+        love.graphics.printf("Server IP", boxX + 20, layout.ipLabelY, boxWidth - 40, "left")
+        love.graphics.setColor(buttonColors.fill)
+        love.graphics.rectangle("fill", layout.ipRect.x, layout.ipRect.y, layout.ipRect.w, layout.ipRect.h, rounding,
+            rounding)
+        if self.active_join_input == "ip" then
+            love.graphics.setColor(buttonColors.outlineActive)
+        else
+            love.graphics.setColor(buttonColors.outline)
+        end
+        love.graphics.rectangle("line", layout.ipRect.x, layout.ipRect.y, layout.ipRect.w, layout.ipRect.h, rounding,
+            rounding)
 
-        -- Draw input text
-        love.graphics.setColor(1, 1, 1, 1)
-        love.graphics.printf(self.ip_input, boxX + 30, inputY + 12, boxWidth - 60, "left")
+        -- Draw IP text
+        love.graphics.setColor(textPrimary)
+        love.graphics.printf(self.ip_input, layout.ipRect.x + 10, layout.ipRect.y + 12, layout.ipRect.w - 20, "left")
 
-        -- Draw blinking cursor
+        -- Draw Display Name label and field
+        love.graphics.setColor(textMuted)
+        love.graphics.printf("Display Name", boxX + 20, layout.nameLabelY, boxWidth - 40, "left")
+        love.graphics.setColor(buttonColors.fill)
+        love.graphics.rectangle("fill", layout.nameRect.x, layout.nameRect.y, layout.nameRect.w, layout.nameRect.h,
+            rounding, rounding)
+        if self.active_join_input == "name" then
+            love.graphics.setColor(buttonColors.outlineActive)
+        else
+            love.graphics.setColor(buttonColors.outline)
+        end
+        love.graphics.rectangle("line", layout.nameRect.x, layout.nameRect.y, layout.nameRect.w, layout.nameRect.h,
+            rounding, rounding)
+
+        love.graphics.setColor(textPrimary)
+        love.graphics.printf(self.display_name_input or "", layout.nameRect.x + 10, layout.nameRect.y + 12,
+            layout.nameRect.w - 20, "left")
+
+        -- Draw Randomize button
+        local randomFill, randomOutline = Theme.getButtonColors("default")
+        love.graphics.setColor(randomFill)
+        love.graphics.rectangle("fill", layout.randomRect.x, layout.randomRect.y, layout.randomRect.w,
+            layout.randomRect.h, rounding, rounding)
+        love.graphics.setColor(randomOutline)
+        love.graphics.rectangle("line", layout.randomRect.x, layout.randomRect.y, layout.randomRect.w,
+            layout.randomRect.h, rounding, rounding)
+        love.graphics.setColor(textPrimary)
+        love.graphics.printf("Randomize", layout.randomRect.x, layout.randomRect.y + 12, layout.randomRect.w, "center")
+
+        -- Draw blinking cursor in active field
         if self.cursor_visible then
-            local textWidth = self.fontButton:getWidth(self.ip_input)
-            love.graphics.setColor(0.6, 0.8, 1, 1)
-            love.graphics.rectangle("fill", boxX + 30 + textWidth + 2, inputY + 10, 2, 20)
+            love.graphics.setColor(buttonColors.outlineActive)
+            if self.active_join_input == "ip" then
+                local textWidth = self.fontButton:getWidth(self.ip_input)
+                love.graphics.rectangle("fill", layout.ipRect.x + 10 + textWidth + 2, layout.ipRect.y + 10, 2, 20)
+            else
+                local textWidth = self.fontButton:getWidth(self.display_name_input or "")
+                love.graphics.rectangle("fill", layout.nameRect.x + 10 + textWidth + 2,
+                    layout.nameRect.y + 10, 2, 20)
+            end
         end
 
         -- Draw instructions
-        love.graphics.setColor(0.7, 0.7, 0.7, 1)
-        local smallFont = love.graphics.newFont(14)
+        love.graphics.setColor(textMuted)
+        local smallFont = Theme.getFont("chat")
         love.graphics.setFont(smallFont)
-        love.graphics.printf("Press ENTER to connect | ESC to cancel", boxX, inputY + 50, boxWidth, "center")
+        love.graphics.printf("Press ENTER to connect | ESC to cancel | TAB to switch field", boxX,
+            layout.instructionsY, boxWidth, "center")
     end
 
     love.graphics.setLineWidth(1)
@@ -274,13 +426,30 @@ end
 
 function MenuState:keypressed(key)
     if self.ip_input_mode then
+        if key == "tab" then
+            if self.active_join_input == "ip" then
+                self.active_join_input = "name"
+            else
+                self.active_join_input = "ip"
+            end
+            return
+        end
+
         if key == "return" or key == "kpenter" then
+            if self.display_name_input and self.display_name_input ~= "" then
+                Config.PLAYER_NAME = self.display_name_input
+            end
             Gamestate.switch(require("src.states.play"), { mode = "join", host = self.ip_input })
         elseif key == "escape" then
             self.ip_input_mode = false
             self.ip_input = "localhost"
         elseif key == "backspace" then
-            self.ip_input = string.sub(self.ip_input, 1, -2)
+            if self.active_join_input == "name" then
+                local text = self.display_name_input or ""
+                self.display_name_input = string.sub(text, 1, -2)
+            else
+                self.ip_input = string.sub(self.ip_input, 1, -2)
+            end
         end
         return
     end
@@ -293,7 +462,11 @@ end
 
 function MenuState:textinput(t)
     if self.ip_input_mode then
-        self.ip_input = self.ip_input .. t
+        if self.active_join_input == "name" then
+            self.display_name_input = (self.display_name_input or "") .. t
+        else
+            self.ip_input = self.ip_input .. t
+        end
     end
 end
 
