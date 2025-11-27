@@ -22,6 +22,10 @@ function PhysicsSystem:handleBeginContact(fixtureA, fixtureB, contact)
 
     if not entityA or not entityB then return end
 
+    if entityA.projectile and entityB.projectile then
+        return
+    end
+
     -- Ignore collisions between projectile and owner
     if (entityA.projectile and entityA.projectile.owner == entityB)
         or (entityB.projectile and entityB.projectile.owner == entityA) then
@@ -37,6 +41,11 @@ function PhysicsSystem:handlePreSolve(fixtureA, fixtureB, contact)
     local entityB = fixtureB and fixtureB:getUserData() or nil
 
     if not entityA or not entityB then return end
+
+    if entityA.projectile and entityB.projectile then
+        contact:setEnabled(false)
+        return
+    end
 
     -- Disable physical response between projectile and owner
     if (entityA.projectile and entityA.projectile.owner == entityB)
