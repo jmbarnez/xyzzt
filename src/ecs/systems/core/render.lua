@@ -41,6 +41,38 @@ function RenderSystem:draw()
 
     -- Update HUMP Camera to the local coordinates
     if camera then
+        local zoom = camera.scale or 1
+        local half_size = DefaultSector.SECTOR_SIZE / 2
+        local half_view_w = (screen_w / 2) / zoom
+        local half_view_h = (screen_h / 2) / zoom
+
+        local min_x = -half_size + half_view_w
+        local max_x = half_size - half_view_w
+        local min_y = -half_size + half_view_h
+        local max_y = half_size - half_view_h
+
+        if min_x > max_x then
+            min_x = 0
+            max_x = 0
+        end
+
+        if min_y > max_y then
+            min_y = 0
+            max_y = 0
+        end
+
+        if cam_x < min_x then
+            cam_x = min_x
+        elseif cam_x > max_x then
+            cam_x = max_x
+        end
+
+        if cam_y < min_y then
+            cam_y = min_y
+        elseif cam_y > max_y then
+            cam_y = max_y
+        end
+
         camera:lookAt(cam_x, cam_y)
     end
 

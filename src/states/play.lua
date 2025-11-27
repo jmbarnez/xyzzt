@@ -11,35 +11,36 @@ local Window        = require "src.ui.hud.window"
 local CargoPanel    = require "src.ui.hud.cargo_panel"
 local Interpolation = require "src.network.interpolation"
 local EntityUtils   = require "src.utils.entity_utils"
+local Client        = require "src.network.client"
+local Protocol      = require "src.network.protocol"
 
 require "src.ecs.components"
 
 -- System Imports
-local PlayerControlSystem         = require "src.ecs.systems.gameplay.player_control"
-local MovementSystem              = require "src.ecs.systems.core.movement"
-local DeathSystem                 = require "src.ecs.systems.gameplay.death"
-local LootSystem                  = require "src.ecs.systems.gameplay.loot"
-local ShipDeathSystem             = require "src.ecs.systems.gameplay.ship_death"
-local CollisionSystem             = require "src.ecs.systems.core.collision"
+local PlayerControlSystem   = require "src.ecs.systems.gameplay.player_control"
+local MovementSystem        = require "src.ecs.systems.core.movement"
+local DeathSystem           = require "src.ecs.systems.gameplay.death"
+local LootSystem            = require "src.ecs.systems.gameplay.loot"
+local ShipDeathSystem       = require "src.ecs.systems.gameplay.ship_death"
+local CollisionSystem       = require "src.ecs.systems.core.collision"
+local MinimapSystem         = require "src.ecs.systems.visual.minimap"
+local PhysicsSystem         = require "src.ecs.systems.core.physics"
+local RenderSystem          = require "src.ecs.systems.core.render"
+local ShipSystem            = require "src.ecs.spawners.ship"
+local Asteroids             = require "src.ecs.spawners.asteroid"
+local EnemySpawner          = require "src.ecs.spawners.enemy"
+local WeaponSystem          = require "src.ecs.systems.gameplay.weapon"
+local ProjectileSystem      = require "src.ecs.systems.gameplay.projectile"
+local AsteroidChunkSystem   = require "src.ecs.systems.gameplay.asteroid_chunk"
+local ProjectileShardSystem = require "src.ecs.systems.visual.projectile_shard"
+local ItemPickupSystem      = require "src.ecs.systems.gameplay.item_pickup"
+local TrailSystem           = require "src.ecs.systems.visual.trail"
+local AISystem              = require "src.ecs.systems.gameplay.ai_system"
+local DefaultSector         = require "src.data.default_sector"
 
-local MinimapSystem               = require "src.ecs.systems.visual.minimap"
-local PhysicsSystem               = require "src.ecs.systems.core.physics"
-local RenderSystem                = require "src.ecs.systems.core.render"
-local ShipSystem                  = require "src.ecs.spawners.ship"
-local Asteroids                   = require "src.ecs.spawners.asteroid"
-local EnemySpawner                = require "src.ecs.spawners.enemy"
-local WeaponSystem                = require "src.ecs.systems.gameplay.weapon"
-local ProjectileSystem            = require "src.ecs.systems.gameplay.projectile"
-local AsteroidChunkSystem         = require "src.ecs.systems.gameplay.asteroid_chunk"
-local ProjectileShardSystem       = require "src.ecs.systems.visual.projectile_shard"
-local ItemPickupSystem            = require "src.ecs.systems.gameplay.item_pickup"
-local TrailSystem                 = require "src.ecs.systems.visual.trail"
-local AISystem                    = require "src.ecs.systems.gameplay.ai_system"
-local DefaultSector               = require "src.data.default_sector"
-
-local PlayState                   = {}
-PlayState.server_time_offset      = nil
-local debugPrintedRemoteAsteroids = {}
+--
+-- LOCAL HELPER FUNCTIONS
+--
 
 local function createLocalPlayer(world)
     local player = Concord.entity(world)
@@ -52,9 +53,7 @@ local function createLocalPlayer(world)
 end
 
 local function linkPlayerToShip(player, ship)
-    if not (player and ship and ship.input) then
-        return
-    end
+    if not (player and ship and ship.input) then return end
     player:give("controlling", ship)
     player.input = ship.input
 end
@@ -74,1019 +73,89 @@ local function loadSnapshot(loadParams)
 end
 
 local function getSpawnParamsFromSnapshot(snapshot, default_ship_name)
-    local spawn_x = 0
-    local spawn_y = 0
+    local spawn_x, spawn_y = 0, 0
     local ship_name = default_ship_name or "starter_drone"
-    local sector_x
-    local sector_y
+    local sector_x, sector_y
 
     if snapshot and snapshot.player and snapshot.player.ship then
         local s = snapshot.player.ship
         if s.transform then
-            if s.transform.x then spawn_x = s.transform.x end
-            if s.transform.y then spawn_y = s.transform.y end
+            spawn_x = s.transform.x or spawn_x
+            spawn_y = s.transform.y or spawn_y
         end
         if s.sector then
             sector_x = s.sector.x
             sector_y = s.sector.y
         end
-        if s.ship_name then
-            ship_name = s.ship_name
-        end
+        ship_name = s.ship_name or ship_name
     end
 
     return spawn_x, spawn_y, ship_name, sector_x, sector_y
 end
 
-local function sendClientInput(self)
-    local Client = require "src.network.client"
-    if not self.world.hosting and Client.connected and self.world.local_ship and self.world.local_ship.input then
-        local input = self.world.local_ship.input
-        local transform = self.world.local_ship.transform
-        Client.sendInput(
-            input.move_x or 0,
-            input.move_y or 0,
-            input.fire or false,
-            input.target_angle or 0,
-            transform.x,
-            transform.y,
-            transform.r
-        )
-    end
-end
+--
+-- PLAYSTATE DEFINITION
+--
+
+local PlayState = {}
+PlayState.server_time_offset = nil
+
+--
+-- LIFECYCLE METHODS
+--
 
 function PlayState:enter(prev, param)
-    local loadParams
-    if type(param) == "table" then
-        loadParams = param
-    end
-
-    -- Check if we're joining
+    local loadParams = (type(param) == "table") and param or nil
+    local snapshot = loadSnapshot(loadParams)
     local is_joining = loadParams and loadParams.mode == "join"
     local join_host = loadParams and loadParams.host or "localhost"
 
-    local snapshot = loadSnapshot(loadParams)
-
-    self.world = Concord.world()
-    self.world.background = Background.new()
-    self.world.debug_asteroid_overlay = false
-    self.world.player_dead = false
-    self.world.player_death_time = nil
-
-    -- Camera
-    self.world.camera = Camera.new()
-    self.world.camera:zoomTo(Config.CAMERA_DEFAULT_ZOOM)
-
-    -- Physics (always present; role decides authority)
-    self.world.physics_world = love.physics.newWorld(0, 0, true)
-
-    -- UI state for in-flight HUD
-    self.world.ui = {
-        cargo_open = false,
-        cargo_window = nil,
-        cargo_drag = {
-            active = false,
-            offset_x = 0,
-            offset_y = 0,
-        },
-        hover_target = nil,
-    }
-
-    -- Init Chat
-    Chat.init()
-    Chat.enable()
-
-    -- Init ENet Client
-    local Client = require "src.network.client"
-
-    -- Server hosting is disabled by default (press F5 to host)
-    self.world.hosting = false
-
-    -- Setup Chat Networking
-    Chat.setSendHandler(function(message)
-        local Client = require "src.network.client"
-        local Protocol = require "src.network.protocol"
-
-        -- If we're connected as a network client, send through the server
-        if Client.connected then
-            Client.sendChatMessage(message)
-            return
-        end
-
-        -- If we're hosting but not connected as a client, broadcast directly via the server
-        if self.world.hosting and self.world.server then
-            local Server = self.world.server
-
-            -- Show locally for the host
-            Chat.addMessage("You: " .. message, "text")
-
-            -- Broadcast to all connected clients as a host/system message (player_id = 0)
-            local host_player_id = 0
-            local packet = Protocol.createChatBroadcastPacket(host_player_id, message)
-            Server.broadcast(packet)
-            return
-        end
-
-        -- Singleplayer / offline: just show locally
-        Chat.addMessage("You: " .. message, "text")
-    end)
-
-    Client.setChatCallback(function(player_id, message)
-        -- Determine sender name
-        local sender = "Player " .. player_id
-        if Client.player_id and player_id == Client.player_id then
-            sender = "You"
-        end
-
-        Chat.addMessage(sender .. ": " .. message, "text")
-    end)
-
-    -- Set server address
-    if is_joining then
-        Client.server_address = join_host
-        -- Auto-connect when joining
-        Client.connect()
-    else
-        Client.server_address = "localhost"
-        -- Don't auto-connect, wait for F5 hosting or manual join
-    end
-
-    -- Track networked entities by network_id
-    self.world.networked_entities = {}    -- Map of network_id -> entity
-    self.world.interpolation_buffers = {} -- Map of network_id -> interpolation buffer
-    self.player_entity_ids = {}           -- Map of player_id -> entity_id
-
-    -- Set up network callbacks
-    Client.setWorldStateCallback(function(packet)
-        -- Hosts don't process world state updates - they ARE the authoritative world!
-        if self.world.hosting then
-            return
-        end
-
-        local now = love.timer.getTime()
-        if packet.server_time then
-            -- Calculate offset: server_time = client_time + offset
-            -- offset = server_time - client_time
-            -- We want the LARGEST offset (closest to 0 or positive), which corresponds to the FASTEST transmission
-            -- (smallest RTT).
-            -- Actually, let's look at it this way:
-            -- server_time = client_time + offset + latency
-            -- offset = server_time - client_time - latency
-            -- Since we don't know latency per packet, we assume the packet with the
-            -- HIGHEST (server_time - client_time) value had the LOWEST latency.
-            -- (Because latency is subtracted from the ideal offset).
-
-            local offset = packet.server_time - now
-
-            -- Initialize or update if we found a "better" (higher) offset (meaning lower latency)
-            -- We also slowly decay the offset to account for clock drift or route changes
-            if self.server_time_offset == nil then
-                self.server_time_offset = offset
-            elseif offset > self.server_time_offset then
-                -- Found a packet with less lag, snap to it immediately
-                self.server_time_offset = offset
-            else
-                -- Slowly drift towards the current offset to handle clock drift
-                -- But very slowly, so we don't jitter
-                self.server_time_offset = self.server_time_offset * 0.99 + offset * 0.01
-            end
-        end
-        local time_offset = self.server_time_offset or 0
-
-        -- Track which network IDs were received in this packet (for diagnostics / future use)
-        local received_ids = {}
-
-        -- Apply world state to entities (CLIENTS ONLY)
-        for _, state in ipairs(packet.entities) do
-            received_ids[state.id] = true
-            local entity = self.world.networked_entities[state.id]
-
-            if entity then
-                -- Check if this is our own controlled ship
-                local is_my_ship = (self.my_entity_id and state.id == self.my_entity_id)
-
-                -- Update existing entity
-                -- For OUR ship: only update HP, not position (client-side prediction)
-                -- UNLESS we are way out of sync (e.g. big collision discrepancy)
-                if is_my_ship then
-                    if entity.transform then
-                        local dx = entity.transform.x - state.x
-                        local dy = entity.transform.y - state.y
-                        local dist_sq = dx * dx + dy * dy
-
-                        local snap_dist = Config.RECONCILE_SNAP_DISTANCE or 150
-                        local hard_threshold = snap_dist * snap_dist
-
-                        if dist_sq > hard_threshold then
-                            -- Hard snap to server position only when error is very large
-                            entity.transform.x = state.x
-                            entity.transform.y = state.y
-
-                            if entity.physics and entity.physics.body and not entity.physics.body:isDestroyed() then
-                                entity.physics.body:setPosition(state.x, state.y)
-
-                                if state.vx and state.vy then
-                                    entity.physics.body:setLinearVelocity(state.vx, state.vy)
-                                end
-                            end
-                        else
-                            -- Softly blend towards server state to reduce small jitters
-                            local blend = 0.1
-                            local target_x, target_y = state.x, state.y
-
-                            entity.transform.x = entity.transform.x + (target_x - entity.transform.x) * blend
-                            entity.transform.y = entity.transform.y + (target_y - entity.transform.y) * blend
-
-                            if entity.physics and entity.physics.body and not entity.physics.body:isDestroyed() then
-                                local body = entity.physics.body
-                                local bx, by = body:getPosition()
-                                local new_x = bx + (target_x - bx) * blend
-                                local new_y = by + (target_y - by) * blend
-                                body:setPosition(new_x, new_y)
-
-                                if state.vx and state.vy then
-                                    local bvx, bvy = body:getLinearVelocity()
-                                    local new_vx = bvx + (state.vx - bvx) * blend
-                                    local new_vy = bvy + (state.vy - bvy) * blend
-                                    body:setLinearVelocity(new_vx, new_vy)
-                                end
-                            end
-                        end
-                    end
-                else
-                    -- For REMOTE ships and asteroids: use interpolation WITH error correction
-
-                    -- Determine threshold based on entity type
-                    local snap_threshold
-                    if state.type == "vehicle" then
-                        snap_threshold = Config.RECONCILE_REMOTE_SHIP or 100
-                    elseif state.type == "projectile" then
-                        snap_threshold = Config.RECONCILE_PROJECTILE or 25
-                    else -- asteroids and chunks
-                        snap_threshold = Config.RECONCILE_ASTEROID or 50
-                    end
-
-                    -- Check for position drift
-                    local should_snap = false
-                    if entity.transform then
-                        local dx = entity.transform.x - state.x
-                        local dy = entity.transform.y - state.y
-                        local dist_sq = dx * dx + dy * dy
-                        local threshold_sq = snap_threshold * snap_threshold
-
-                        if dist_sq > threshold_sq then
-                            should_snap = true
-                        end
-                    end
-
-                    if should_snap then
-                        -- Position has drifted too far, snap to server position
-                        if entity.transform then
-                            entity.transform.x = state.x
-                            entity.transform.y = state.y
-                            entity.transform.r = state.r
-                        end
-
-                        if entity.physics and entity.physics.body and not entity.physics.body:isDestroyed() then
-                            entity.physics.body:setPosition(state.x, state.y)
-                            entity.physics.body:setAngle(state.r)
-
-                            if state.vx and state.vy then
-                                entity.physics.body:setLinearVelocity(state.vx, state.vy)
-                            end
-                            if state.angular_velocity then
-                                entity.physics.body:setAngularVelocity(state.angular_velocity)
-                            end
-                        end
-
-                        -- Clear and reset interpolation buffer for smooth restart
-                        self.world.interpolation_buffers[state.id] = nil
-                    end
-
-                    -- Add state to interpolation buffer (for smooth movement between corrections)
-                    local buffer = self.world.interpolation_buffers[state.id]
-                    if not buffer then
-                        buffer = Interpolation.createBuffer()
-                        self.world.interpolation_buffers[state.id] = buffer
-                    end
-
-                    -- Add this state to the buffer
-                    Interpolation.addState(
-                        buffer,
-                        (packet.server_time and (packet.server_time + time_offset)) or now,
-                        state.x,
-                        state.y,
-                        state.r,
-                        state.vx,
-                        state.vy,
-                        state.angular_velocity
-                    )
-
-                    -- Sector is discrete; update it immediately from latest state
-                    if entity.sector then
-                        entity.sector.x = state.sx
-                        entity.sector.y = state.sy
-                    end
-                end
-
-                -- Always update HP (even for local player)
-                if entity.hp and state.hp_current then
-                    entity.hp.current = state.hp_current
-                end
-
-                if entity.hull and state.hull_current then
-                    entity.hull.current = state.hull_current
-                    if state.hull_max then
-                        entity.hull.max = state.hull_max
-                    end
-                end
-
-                if entity.shield and state.shield_current then
-                    entity.shield.current = state.shield_current
-                    if state.shield_max then
-                        entity.shield.max = state.shield_max
-                    end
-                end
-            else
-                -- Spawn new remote entity if it doesn't exist
-                if state.type == "vehicle" then
-                    -- Spawn remote player ship
-                    local is_me = (self.my_entity_id and state.id == self.my_entity_id)
-                    local ship = ShipSystem.spawn(self.world, "starter_drone", state.x, state.y, is_me)
-
-                    if ship then
-                        -- Store network ID
-                        ship.network_id = state.id
-
-                        -- Set initial state
-                        if ship.transform then
-                            ship.transform.r = state.r
-                        end
-                        if ship.sector then
-                            ship.sector.x = state.sx
-                            ship.sector.y = state.sy
-                        end
-                        if ship.physics and ship.physics.body and not ship.physics.body:isDestroyed() then
-                            -- Set rotation on physics body
-                            ship.physics.body:setAngle(state.r)
-                            -- Set velocity
-                            if state.vx and state.vy then
-                                ship.physics.body:setLinearVelocity(state.vx, state.vy)
-                            end
-                        end
-                        if ship.hp and state.hp_current then
-                            ship.hp.current = state.hp_current
-                        end
-
-                        if ship.hull and state.hull_current then
-                            ship.hull.current = state.hull_current
-                            if state.hull_max then
-                                ship.hull.max = state.hull_max
-                            end
-                        end
-
-                        if ship.shield and state.shield_current then
-                            ship.shield.current = state.shield_current
-                            if state.shield_max then
-                                ship.shield.max = state.shield_max
-                            end
-                        end
-
-                        -- Track this entity
-                        self.world.networked_entities[state.id] = ship
-
-                        print("Spawned remote player ship with network_id=" .. state.id)
-
-                        -- If this is MY ship (from WELCOME packet), link controls!
-                        if is_me then
-                            print("Linking controls to my authoritative ship!")
-                            linkPlayerToShip(self.player, ship)
-                            self.world.local_ship = ship
-                            -- Ensure it's marked as host/local for rendering (green)
-                            if ship.render then
-                                ship.render.color = { 0.2, 1, 0.2 }
-                            end
-                        end
-                    end
-                elseif state.type == "asteroid" then
-                    -- Spawn remote asteroid using server-authoritative geometry (vertices)
-                    local asteroid = Concord.entity(self.world)
-                    asteroid.network_id = state.id
-
-                    asteroid:give("transform", state.x, state.y, state.r or 0)
-                    asteroid:give("sector", state.sx, state.sy)
-
-                    -- Parse vertices from string if available
-                    local vertices = nil
-                    print("[CLIENT] Received asteroid " ..
-                        state.id ..
-                        ": vertices_str=" ..
-                        tostring(state.vertices_str ~= nil) .. ", vertices=" .. tostring(state.vertices ~= nil))
-                    if state.vertices_str then
-                        vertices = {}
-                        for num in string.gmatch(state.vertices_str, "[^,]+") do
-                            table.insert(vertices, tonumber(num))
-                        end
-                        print("[CLIENT] Parsed " .. #vertices .. " vertex coordinates from vertices_str")
-                    elseif state.vertices then
-                        vertices = state.vertices
-                        print("[CLIENT] Using direct vertices table with " .. #vertices .. " coords")
-                    end
-
-                    asteroid:give("render", {
-                        type = "asteroid",
-                        color = state.color or { 0.6, 0.6, 0.6, 1 },
-                        radius = state.radius or 30,
-                        vertices = vertices,
-                        seed = state.seed,
-                    })
-
-                    if not vertices then
-                        print("CLIENT WARNING: Spawning remote asteroid " ..
-                            state.id .. " WITHOUT VERTICES! Fallback to circle.")
-                    end
-
-                    -- Store asteroid seed for any systems that rely on it
-                    if state.seed then
-                        asteroid:give("asteroid", state.seed)
-                    else
-                        asteroid:give("asteroid")
-                    end
-
-                    if state.hp_max or state.hp_current then
-                        local hp_max = state.hp_max or state.hp_current or 60
-                        local hp_current = state.hp_current or state.hp_max or hp_max
-                        asteroid:give("hp", hp_max, hp_current)
-                    end
-
-                    -- Physics body using server-provided polygon (clamped to Box2D 8-vertex limit)
-                    if self.world.physics_world then
-                        local body = love.physics.newBody(self.world.physics_world, state.x, state.y, "dynamic")
-                        body:setLinearDamping(Config.LINEAR_DAMPING * 2)
-                        body:setAngularDamping(Config.LINEAR_DAMPING * 2)
-
-                        local shape
-                        local verts = vertices -- Use the parsed vertices
-                        if type(verts) == "table" and #verts >= 6 and (#verts % 2 == 0) then
-                            -- Box2D supports a maximum of 8 vertices per polygon
-                            local maxCoords = 8 * 2
-                            if #verts > maxCoords then
-                                local truncated = {}
-                                for i = 1, maxCoords do
-                                    truncated[i] = verts[i]
-                                end
-                                verts = truncated
-                            end
-
-                            -- Validate polygon convexity/winding (simple check: just try to create it)
-                            local success, result = pcall(function() return love.physics.newPolygonShape(verts) end)
-                            if success then
-                                shape = result
-                            else
-                                print("CLIENT ERROR: Failed to create polygon shape for asteroid " ..
-                                    state.id .. ": " .. tostring(result))
-                                shape = love.physics.newCircleShape(state.radius or 30)
-                            end
-                        else
-                            -- Fallback: simple circle if vertices are missing or invalid
-                            shape = love.physics.newCircleShape(state.radius or 30)
-                        end
-
-                        local fixture = love.physics.newFixture(body, shape, 1.0)
-                        fixture:setRestitution(0.1)
-                        fixture:setUserData(asteroid)
-
-                        asteroid:give("physics", body, shape, fixture)
-
-                        body:setAngle(state.r or 0)
-                        if state.vx and state.vy then
-                            body:setLinearVelocity(state.vx, state.vy)
-                        end
-                        if state.angular_velocity then
-                            body:setAngularVelocity(state.angular_velocity)
-                        end
-                    end
-
-                    self.world.networked_entities[state.id] = asteroid
-                elseif state.type == "asteroid_chunk" then
-                    -- Spawn remote asteroid chunk using server-sent shape/seed
-                    local chunk = Concord.entity(self.world)
-                    chunk.network_id = state.id
-
-                    chunk:give("transform", state.x, state.y, state.r or 0)
-                    chunk:give("sector", state.sx, state.sy)
-
-                    -- Parse vertices from string if available (same as asteroids)
-                    local vertices = nil
-                    if state.vertices_str then
-                        vertices = {}
-                        for num in string.gmatch(state.vertices_str, "[^,]+") do
-                            table.insert(vertices, tonumber(num))
-                        end
-                    elseif state.vertices then
-                        vertices = state.vertices
-                    end
-
-                    chunk:give("render", {
-                        render_type = "asteroid_chunk",
-                        color = state.color or { 0.7, 0.7, 0.7, 1 },
-                        radius = state.radius or 10,
-                        vertices = vertices,
-                        seed = state.seed,
-                    })
-                    chunk:give("asteroid_chunk")
-
-                    if state.hp_max or state.hp_current then
-                        chunk:give("hp", state.hp_max or state.hp_current or 10, state.hp_current or state.hp_max or 10)
-                    end
-
-                    if self.world.physics_world and vertices then
-                        local body = love.physics.newBody(self.world.physics_world, state.x, state.y, "dynamic")
-                        body:setLinearDamping(1.0)
-                        body:setAngularDamping(1.0)
-
-                        local verts = vertices
-                        local shape
-                        if type(verts) == "table" and #verts >= 6 and (#verts % 2 == 0) then
-                            -- Clamp chunk polygons to Box2D 8-vertex limit as well
-                            local maxCoords = 8 * 2
-                            if #verts > maxCoords then
-                                local truncated = {}
-                                for i = 1, maxCoords do
-                                    truncated[i] = verts[i]
-                                end
-                                verts = truncated
-                            end
-                            shape = love.physics.newPolygonShape(verts)
-                        else
-                            shape = love.physics.newCircleShape(state.radius or 8)
-                        end
-                        local fixture = love.physics.newFixture(body, shape, 0.5)
-                        fixture:setRestitution(0.2)
-                        fixture:setUserData(chunk)
-
-                        chunk:give("physics", body, shape, fixture)
-
-                        if state.vx and state.vy then
-                            body:setLinearVelocity(state.vx, state.vy)
-                        end
-                        if state.angular_velocity then
-                            body:setAngularVelocity(state.angular_velocity)
-                        end
-                    end
-
-                    self.world.networked_entities[state.id] = chunk
-                elseif state.type == "projectile" then
-                    local is_my_projectile = (self.my_entity_id and state.owner_id == self.my_entity_id)
-
-                    -- Shooters use locally predicted projectiles; skip server projectiles owned by us.
-                    if not is_my_projectile then
-                        -- Spawn remote projectile
-                        local projectile = Concord.entity(self.world)
-                        projectile.network_id = state.id
-                        projectile:give("transform", state.x, state.y, state.r or 0)
-                        projectile:give("sector", state.sx, state.sy)
-
-                        -- Resolve projectile owner on the client (if provided) so we can
-                        -- avoid self-collision visuals and logic.
-                        local owner_entity = nil
-                        if state.owner_id then
-                            owner_entity = self.world.networked_entities[state.owner_id]
-                        end
-                        projectile:give("projectile", state.damage or 10, state.lifetime or 1.5, owner_entity)
-                        projectile:give("render", {
-                            type = "projectile",
-                            color = state.color or { 1, 0.5, 0 },
-                            radius = state.radius or 3,
-                            length = state.length,
-                            thickness = state.thickness,
-                            shape = state.shape or "beam"
-                        })
-
-                        if self.world.physics_world then
-                            local body = love.physics.newBody(self.world.physics_world, state.x, state.y, "dynamic")
-                            body:setBullet(true)
-                            body:setAngle(state.r or 0)
-
-                            local radius = state.radius or 3
-                            local length = state.length or (radius * 4)
-                            local thickness = state.thickness or (radius * 0.7)
-                            local half_length = length * 0.5
-                            local half_thickness = thickness * 0.5
-
-                            local shape = love.physics.newPolygonShape(
-                                -half_length, -half_thickness,
-                                half_length, -half_thickness,
-                                half_length, half_thickness,
-                                -half_length, half_thickness
-                            )
-
-                            local fixture = love.physics.newFixture(body, shape, 0.1)
-                            fixture:setRestitution(0)
-                            fixture:setSensor(true)
-                            projectile:give("physics", body, shape, fixture)
-                            fixture:setUserData(projectile)
-
-                            if state.vx and state.vy then
-                                body:setLinearVelocity(state.vx, state.vy)
-                            end
-                        end
-
-                        self.world.networked_entities[state.id] = projectile
-                    end
-                elseif state.type == "item" then
-                    -- Spawn remote item
-                    local item = Concord.entity(self.world)
-                    item.network_id = state.id
-
-                    item:give("transform", state.x, state.y, state.r or 0)
-                    item:give("sector", state.sx, state.sy)
-
-                    item:give("render", {
-                        render_type = "item",
-                        color = state.color or { 1, 1, 1, 1 },
-                        shape = state.shape
-                    })
-
-                    item:give("item", state.item_type, state.item_name, state.item_volume)
-
-                    -- Create physics body (kinematic, no fixtures like host)
-                    if self.world.physics_world then
-                        local body = love.physics.newBody(self.world.physics_world, state.x, state.y, "kinematic")
-                        body:setLinearDamping(2.0)
-                        body:setAngularDamping(2.0)
-
-                        item:give("physics", body, nil, nil)
-
-                        if state.vx and state.vy then
-                            body:setLinearVelocity(state.vx, state.vy)
-                        end
-                        if state.angular_velocity then
-                            body:setAngularVelocity(state.angular_velocity)
-                        end
-                    end
-
-                    self.world.networked_entities[state.id] = item
-                end
-            end
-
-            local named_entity = self.world.networked_entities[state.id]
-            if named_entity and named_entity.vehicle and not named_entity.ai and not named_entity.name then
-                local owner_player_id = nil
-                if self.player_entity_ids then
-                    for pid, eid in pairs(self.player_entity_ids) do
-                        if eid == state.id then
-                            owner_player_id = pid
-                            break
-                        end
-                    end
-                end
-
-                if owner_player_id then
-                    local label
-                    local Client = require "src.network.client"
-                    if Client.player_id and owner_player_id == Client.player_id then
-                        label = Config.PLAYER_NAME or "Player"
-                    else
-                        label = "Player " .. tostring(owner_player_id)
-                    end
-
-                    named_entity:give("name", label)
-                end
-            end
-        end
-
-        -- Removals
-        if packet.removed_ids then
-            -- Delta world state: server explicitly tells us which entities were removed
-            local removed_ids = packet.removed_ids
-            for _, net_id in ipairs(removed_ids) do
-                if net_id ~= self.my_entity_id then
-                    local entity = self.world.networked_entities[net_id]
-                    if entity then
-                        EntityUtils.cleanup_physics_entity(entity)
-                        self.world.networked_entities[net_id] = nil
-                        if self.world.interpolation_buffers then
-                            self.world.interpolation_buffers[net_id] = nil
-                        end
-                    end
-                end
-            end
-        else
-            -- Full snapshot (e.g. on join): treat missing entities as despawned
-            local entities_to_remove = {}
-            for net_id, entity in pairs(self.world.networked_entities) do
-                if not received_ids[net_id] and net_id ~= self.my_entity_id then
-                    table.insert(entities_to_remove, net_id)
-                end
-            end
-
-            for _, net_id in ipairs(entities_to_remove) do
-                local entity = self.world.networked_entities[net_id]
-                if entity then
-                    EntityUtils.cleanup_physics_entity(entity)
-                    self.world.networked_entities[net_id] = nil
-                    if self.world.interpolation_buffers then
-                        self.world.interpolation_buffers[net_id] = nil
-                    end
-                end
-            end
-        end
-    end)
-
-    Client.setPlayerJoinedCallback(function(player_id, entity_id, player_count)
-        print("Player joined: player_id=" ..
-            player_id .. ", entity_id=" .. tostring(entity_id) .. ", count=" .. tostring(player_count or "?"))
-
-        local name = "Player " .. tostring(player_id)
-        if Client.player_id and player_id == Client.player_id then
-            name = "You"
-        end
-        if player_count and player_count > 0 then
-            Chat.system(string.format("%s joined the game. Players online: %d", name, player_count))
-        else
-            Chat.system(string.format("%s joined the game.", name))
-        end
-
-        -- If this is our own join confirmation, track our local ship
-        if entity_id and self.world.local_ship then
-            self.world.local_ship.network_id = entity_id
-            self.world.networked_entities[entity_id] = self.world.local_ship
-            print("Registered local ship with network_id=" .. entity_id)
-        end
-
-        if entity_id and entity_id ~= 0 then
-            self.player_entity_ids[player_id] = entity_id
-        end
-    end)
-
-    Client.setPlayerLeftCallback(function(player_id, player_count)
-        print("Player left: " .. player_id .. ", count=" .. tostring(player_count or "?"))
-
-        local name = "Player " .. tostring(player_id)
-        if Client.player_id and player_id == Client.player_id then
-            name = "You"
-        end
-        if player_count and player_count > 0 then
-            Chat.system(string.format("%s left the game. Players online: %d", name, player_count))
-        else
-            Chat.system(string.format("%s left the game.", name))
-        end
-
-        -- Note: We'll need to enhance this to remove the entity from networked_entities
-        -- when we have a way to map player_id to entity_id
-
-        local entity_id = self.player_entity_ids and self.player_entity_ids[player_id]
-        if entity_id then
-            self.player_entity_ids[player_id] = nil
-
-            local entity = self.world.networked_entities and self.world.networked_entities[entity_id]
-            if entity then
-                if entity ~= self.world.local_ship then
-                    EntityUtils.cleanup_physics_entity(entity)
-                end
-                self.world.networked_entities[entity_id] = nil
-            end
-
-            if self.world.interpolation_buffers then
-                self.world.interpolation_buffers[entity_id] = nil
-            end
-        end
-    end)
-
-    -- Handle WELCOME packet (Authoritative Spawning)
-    self.my_entity_id = nil
-    Client.setWelcomeCallback(function(player_id, entity_id)
-        print("Received WELCOME: You are player " .. player_id .. ", entity " .. tostring(entity_id))
-        self.my_entity_id = entity_id
-
-        if player_id and entity_id and entity_id ~= 0 then
-            self.player_entity_ids[player_id] = entity_id
-        end
-    end)
-
-    -- Local controls
-    self.world.controls = baton.new({
-        controls = {
-            move_left  = { "key:a", "key:left" },
-            move_right = { "key:d", "key:right" },
-            move_up    = { "key:w", "key:up" },
-            move_down  = { "key:s", "key:down" },
-            fire       = { "mouse:1", "key:space" }
-        }
-    })
-
-    -- Controls are enabled by default
-    self.world.controlsEnabled = true
-
-    -- Add Systems
-    -- Order matters: Input -> Logic -> Physics -> Collision -> Gameplay -> Render
-    self.world:addSystems(
-        PlayerControlSystem, -- 1. Map Hardware to Input Component
-        AISystem,            -- 2. AI Behavior Trees (controls enemy input)
-        MovementSystem,      -- 3. Apply Physics based on Input
-        PhysicsSystem,       -- 4. Step Box2D & Handle Sector Wrapping
-        CollisionSystem,     -- 5. Resolve Collisions (Damage, etc)
-        WeaponSystem,        -- 6. Fire weapons
-        ProjectileSystem,    -- 7. Update projectiles
-        DeathSystem,         -- 8. Handle HP <= 0
-        ShipDeathSystem,
-        LootSystem,          -- 9. Spawn loot from dead entities
-        AsteroidChunkSystem,
-        ProjectileShardSystem,
-        ItemPickupSystem, -- 10. Magnet logic
-        TrailSystem,      -- 11. Update trails
-        RenderSystem,     -- 12. Draw everything
-        MinimapSystem     -- 13. UI Draw
-    )
-
-    -- Player meta-entity (local user, not the ship itself)
-    self.player = createLocalPlayer(self.world)
-
-    local spawn_x, spawn_y, ship_name, sector_x, sector_y = getSpawnParamsFromSnapshot(snapshot, "starter_drone")
-
-    local ship
-    if not is_joining then
-        ship = ShipSystem.spawn(self.world, ship_name, spawn_x, spawn_y, true)
-
-        if sector_x and ship.sector then
-            ship.sector.x = sector_x
-            ship.sector.y = sector_y
-        end
-
-        linkPlayerToShip(self.player, ship)
-
-        -- Track local player's ship for network updates
-        -- The server will assign a network_id when the player joins
-        self.world.local_ship = ship
-    else
-        print("PlayState: Joining game, waiting for server spawn...")
-        -- Do NOT spawn a ship locally. Wait for WELCOME packet and World State.
-    end
-
-    if snapshot then
-        SaveManager.apply_snapshot(self.world, self.player, ship, snapshot)
-    end
-
-    -- Spawn sector contents based on default_sector configuration
-    local player_sector_x = (ship and ship.sector and ship.sector.x) or 0
-    local player_sector_y = (ship and ship.sector and ship.sector.y) or 0
-    local universe_seed = Config.UNIVERSE_SEED or 12345
-
-    -- Spawn asteroids in starting sector
-    if DefaultSector.asteroids.enabled and not is_joining then
-        Asteroids.spawnField(
-            self.world,
-            player_sector_x,
-            player_sector_y,
-            universe_seed,
-            DefaultSector.asteroids.count
-        )
-    end
-
-    -- Spawn enemy ships in starting sector
-    if DefaultSector.enemy_ships.enabled and not is_joining then
-        EnemySpawner.spawnField(
-            self.world,
-            player_sector_x,
-            player_sector_y,
-            universe_seed,
-            DefaultSector.enemy_ships.count,
-            DefaultSector.enemy_ships
-        )
-    end
+    self:initWorld()
+    self:initUI()
+    self:initNetwork(is_joining, join_host)
+    self:initSystems()
+    self:spawnInitialEntities(is_joining, snapshot)
 end
 
 function PlayState:update(dt)
-    -- 1. Update Chat
+    -- 1. Network & Chat Updates
     Chat.update(dt)
+    self:updateNetwork(dt)
 
-    -- Update server if hosting (in-process, non-blocking)
-    if self.world.hosting then
-        local Server = require "src.network.server"
-        Server.update(dt)
-    end
+    -- 2. Input Management
+    self:updateControls()
 
-    -- Update ENet Client
-    local Client = require "src.network.client"
-    Client.update(dt)
-
-    -- 2. Controls are disabled when chat is active
-    if Chat.isActive() or (self.world and self.world.player_dead) then
-        self.world.controlsEnabled = false
-    else
-        self.world.controlsEnabled = true
-    end
-
+    -- 3. World & Physics Updates
     if self.world.background then
         self.world.background:update(dt)
     end
-
+    
     self.world:emit("update", dt)
 
-    -- Apply interpolation for remote entities every frame (clients only)
+    -- 4. Network Interpolation (Client Only)
     if not self.world.hosting then
-        local base_delay = Interpolation.getBaseDelay()
-        local interp_delay = base_delay
-        if Client.connected and Client.ping and Client.ping > 0 then
-            local ping_s = Client.ping / 1000
-            local dynamic = ping_s * 0.5
-
-            -- Never go below the base delay; only increase smoothing for higher pings
-            if dynamic < base_delay then dynamic = base_delay end
-            if dynamic > 0.35 then dynamic = 0.35 end
-
-            interp_delay = dynamic
-        end
-
-        for id, buffer in pairs(self.world.interpolation_buffers) do
-            local entity = self.world.networked_entities[id]
-            if entity then
-                local effective_delay = interp_delay
-                if entity.vehicle and id ~= self.my_entity_id then
-                    effective_delay = effective_delay + 0.03
-                end
-
-                local interp_state = Interpolation.getInterpolatedState(buffer, effective_delay)
-                if interp_state then
-                    if entity.transform then
-                        entity.transform.x = interp_state.x
-                        entity.transform.y = interp_state.y
-                        entity.transform.r = interp_state.r
-                    end
-                    if entity.physics and entity.physics.body and not entity.physics.body:isDestroyed() then
-                        entity.physics.body:setPosition(interp_state.x, interp_state.y)
-                        entity.physics.body:setAngle(interp_state.r)
-                        if interp_state.vx and interp_state.vy then
-                            entity.physics.body:setLinearVelocity(interp_state.vx, interp_state.vy)
-                        end
-                        if interp_state.angular_velocity then
-                            entity.physics.body:setAngularVelocity(interp_state.angular_velocity)
-                        end
-                    end
-                end
-            else
-                if Interpolation.isStale(buffer) then
-                    self.world.interpolation_buffers[id] = nil
-                end
-            end
-        end
+        self:updateInterpolation(dt)
+        self:sendClientInput()
     end
 
-    -- Send inputs to server (CLIENTS ONLY - hosts apply inputs locally)
-    sendClientInput(self)
-
-    if self.world and self.world.camera and self.world.ui then
-        local mx, my = love.mouse.getPosition()
-        local wx, wy = self.world.camera:worldCoords(mx, my)
-
-        local player = self.player
-        local ship = player and player.controlling and player.controlling.entity or nil
-        local ship_sector_x = ship and ship.sector and ship.sector.x or 0
-        local ship_sector_y = ship and ship.sector and ship.sector.y or 0
-
-        local best
-        local bestDist2
-        for _, e in ipairs(self.world:getEntities()) do
-            local t = e.transform
-            local s = e.sector
-            local r = e.render
-            if t and s and r and r.radius and (e.asteroid or e.asteroid_chunk or e.vehicle) then
-                local diff_x = (s.x or 0) - ship_sector_x
-                local diff_y = (s.y or 0) - ship_sector_y
-
-                -- Optimization: Only check entities in neighbor sectors
-                if math.abs(diff_x) <= 1 and math.abs(diff_y) <= 1 then
-                    local ex = t.x + diff_x * DefaultSector.SECTOR_SIZE
-                    local ey = t.y + diff_y * DefaultSector.SECTOR_SIZE
-                    local dx = wx - ex
-                    local dy = wy - ey
-                    local dist2 = dx * dx + dy * dy
-                    local pickRadius = r.radius * 1.2
-                    if dist2 <= pickRadius * pickRadius and (not bestDist2 or dist2 < bestDist2) then
-                        best = e
-                        bestDist2 = dist2
-                    end
-                end
-            end
-        end
-        self.world.ui.hover_target = best
-    end
-
-    -- Update cargo window drag (if any)
+    -- 5. UI Updates
+    self:updateHover()
     CargoPanel.update(dt, self.world)
 end
 
 function PlayState:draw()
     love.graphics.setBackgroundColor(0.03, 0.05, 0.16)
+    
     self.world:emit("draw")
 
     love.graphics.origin()
     HUD.draw(self.world, self.player)
-
-    -- Draw Chat Overlay
     Chat.draw()
 
+    self:drawDeathOverlay()
+end
+
+function PlayState:drawDeathOverlay()
     if self.world and self.world.player_dead then
         local sw, sh = love.graphics.getDimensions()
         love.graphics.setColor(0, 0, 0, 0.7)
@@ -1102,108 +171,36 @@ function PlayState:draw()
     end
 end
 
+--
+-- INPUT HANDLING
+--
+
 function PlayState:keypressed(key)
-    -- 1. Check Chat First
-    if Chat.keypressed(key) then
-        return -- Chat consumed the input
-    end
+    if Chat.keypressed(key) then return end
 
     if self.world and self.world.player_dead then
-        local Client = require "src.network.client"
-
         if key == "escape" then
             Gamestate.switch(require("src.states.menu"))
-            return
-        end
-
-        if key == "r" or key == "return" or key == "space" then
-            if not self.world.hosting and not Client.connected then
-                local spawn_x = 0
-                local spawn_y = 0
-                local ship_name = "starter_drone"
-
-                local ship = ShipSystem.spawn(self.world, ship_name, spawn_x, spawn_y, true)
-                if ship then
-                    self.world.local_ship = ship
-                    linkPlayerToShip(self.player, ship)
-                    self.world.player_dead = false
-                    self.world.player_death_time = nil
-                end
-            end
-            return
-        end
-    end
-
-    if key == "f1" then
-        if self.world then
-            self.world.debug_asteroid_overlay = not self.world.debug_asteroid_overlay
+        elseif key == "r" or key == "return" or key == "space" then
+            self:respawnLocalPlayer()
         end
         return
     end
 
-    -- F5: Start hosting (like Minecraft's "Open to LAN")
+    if key == "f1" and self.world then
+        self.world.debug_asteroid_overlay = not self.world.debug_asteroid_overlay
+        return
+    end
+
     if key == "f5" and not self.world.hosting then
-        local Server = require "src.network.server"
-        -- Pass the host's existing world to the server!
-        if Server.start(25565, self.world) then
-            self.world.hosting = true
-            self.world.server = Server
-            print("Hosting server on port 25565 (F5 pressed)")
-            print("Your world is now open for others to join!")
-
-            -- Host sees chat from clients via server callback
-            Server.setChatCallback(function(player_id, message)
-                local sender = "Player " .. tostring(player_id)
-                if player_id == 0 then
-                    sender = "Host"
-                end
-                Chat.addMessage(sender .. ": " .. message, "text")
-            end)
-
-            Server.setPlayerJoinedCallback(function(player_id, player_count)
-                local name = "Player " .. tostring(player_id)
-                if player_count and player_count > 0 then
-                    Chat.system(string.format("%s joined the game. Players online: %d", name, player_count))
-                else
-                    Chat.system(string.format("%s joined the game.", name))
-                end
-            end)
-
-            Server.setPlayerLeftCallback(function(player_id, player_count)
-                local name = "Player " .. tostring(player_id)
-                if player_count and player_count > 0 then
-                    Chat.system(string.format("%s left the game. Players online: %d", name, player_count))
-                else
-                    Chat.system(string.format("%s left the game.", name))
-                end
-            end)
-
-            -- Give the host's ship a network ID so it can be synced to clients
-            if self.world.local_ship then
-                self.world.local_ship.network_id = Server.next_network_id
-                Server.next_network_id = Server.next_network_id + 1
-                print("Host ship assigned network_id=" .. self.world.local_ship.network_id)
-            end
-
-            -- Retroactively assign network IDs to all existing asteroids, asteroid chunks, and projectiles
-            -- This is CRITICAL: entities spawned at game start (before hosting) need IDs to be synced!
-            for _, e in ipairs(self.world:getEntities()) do
-                if (e.asteroid or e.asteroid_chunk or e.projectile or e.vehicle or e.item) and not e.network_id then
-                    e.network_id = Server.next_network_id
-                    Server.next_network_id = Server.next_network_id + 1
-                end
-            end
-        end
+        self:startHosting()
         return
     end
 
-    -- 2. Standard Game Keys
-    if key == "tab" then
-        if self.world and self.world.ui then
-            self.world.ui.cargo_open = not self.world.ui.cargo_open
-            if not self.world.ui.cargo_open and self.world.ui.cargo_drag then
-                self.world.ui.cargo_drag.active = false
-            end
+    if key == "tab" and self.world and self.world.ui then
+        self.world.ui.cargo_open = not self.world.ui.cargo_open
+        if not self.world.ui.cargo_open and self.world.ui.cargo_drag then
+            self.world.ui.cargo_drag.active = false
         end
     elseif key == "f6" then
         SaveManager.save(1, self.world, self.player)
@@ -1215,48 +212,696 @@ function PlayState:keypressed(key)
 end
 
 function PlayState:textinput(t)
-    -- Pass text input to Chat
-    if Chat.textinput(t) then
-        return
-    end
+    if Chat.textinput(t) then return end
 end
 
 function PlayState:mousepressed(x, y, button)
-    if button ~= 1 then
-        return
-    end
-
-    if CargoPanel.mousepressed(x, y, button, self.world) then
-        return
+    if button == 1 then
+        CargoPanel.mousepressed(x, y, button, self.world)
     end
 end
 
 function PlayState:mousereleased(x, y, button)
-    if button ~= 1 then
-        return
-    end
-
-    if CargoPanel.mousereleased(x, y, button, self.world) then
-        return
+    if button == 1 then
+        CargoPanel.mousereleased(x, y, button, self.world)
     end
 end
 
 function PlayState:wheelmoved(x, y)
     if not self.world or not self.world.camera then return end
-
     local current_zoom = self.world.camera.scale
-    local new_zoom = current_zoom
+    local new_zoom = current_zoom + (y > 0 and Config.CAMERA_ZOOM_STEP or (y < 0 and -Config.CAMERA_ZOOM_STEP or 0))
+    new_zoom = math.max(Config.CAMERA_MIN_ZOOM, math.min(new_zoom, Config.CAMERA_MAX_ZOOM))
+    self.world.camera:zoomTo(new_zoom)
+end
 
-    if y > 0 then
-        new_zoom = current_zoom + Config.CAMERA_ZOOM_STEP
-    elseif y < 0 then
-        new_zoom = current_zoom - Config.CAMERA_ZOOM_STEP
+--
+-- INITIALIZATION SUB-FUNCTIONS
+--
+
+function PlayState:initWorld()
+    self.world = Concord.world()
+    self.world.background = Background.new()
+    self.world.debug_asteroid_overlay = false
+    self.world.player_dead = false
+    self.world.player_death_time = nil
+    
+    -- Camera
+    self.world.camera = Camera.new()
+    self.world.camera:zoomTo(Config.CAMERA_DEFAULT_ZOOM)
+
+    -- Physics
+    self.world.physics_world = love.physics.newWorld(0, 0, true)
+    
+    self.world.hosting = false
+    self.server_time_offset = nil
+    self.world.networked_entities = {}
+    self.world.interpolation_buffers = {}
+    self.player_entity_ids = {}
+    self.my_entity_id = nil
+end
+
+function PlayState:initUI()
+    self.world.ui = {
+        cargo_open = false,
+        cargo_window = nil,
+        cargo_drag = { active = false, offset_x = 0, offset_y = 0 },
+        hover_target = nil,
+    }
+end
+
+function PlayState:initNetwork(is_joining, join_host)
+    Chat.init()
+    Chat.enable()
+
+    -- Setup Chat Network Handlers
+    Chat.setSendHandler(function(message)
+        if Client.connected then
+            Client.sendChatMessage(message)
+        elseif self.world.hosting and self.world.server then
+            local Server = self.world.server
+            Chat.addMessage("You: " .. message, "text")
+            local packet = Protocol.createChatBroadcastPacket(0, message)
+            Server.broadcast(packet)
+        else
+            Chat.addMessage("You: " .. message, "text")
+        end
+    end)
+
+    Client.setChatCallback(function(player_id, message)
+        local sender = (Client.player_id and player_id == Client.player_id) and "You" or ("Player " .. player_id)
+        Chat.addMessage(sender .. ": " .. message, "text")
+    end)
+
+    -- Setup Game Network Handlers
+    Client.setWorldStateCallback(function(packet) self:handleWorldState(packet) end)
+    Client.setPlayerJoinedCallback(function(...) self:handlePlayerJoined(...) end)
+    Client.setPlayerLeftCallback(function(...) self:handlePlayerLeft(...) end)
+    Client.setWelcomeCallback(function(...) self:handleWelcome(...) end)
+
+    if is_joining then
+        Client.server_address = join_host
+        Client.connect()
+    else
+        Client.server_address = "localhost"
+    end
+end
+
+function PlayState:initSystems()
+    self.world.controls = baton.new({
+        controls = {
+            move_left  = { "key:a", "key:left" },
+            move_right = { "key:d", "key:right" },
+            move_up    = { "key:w", "key:up" },
+            move_down  = { "key:s", "key:down" },
+            fire       = { "mouse:1", "key:space" }
+        }
+    })
+    self.world.controlsEnabled = true
+
+    self.world:addSystems(
+        PlayerControlSystem, AISystem, MovementSystem, PhysicsSystem, CollisionSystem,
+        WeaponSystem, ProjectileSystem, DeathSystem, ShipDeathSystem, LootSystem,
+        AsteroidChunkSystem, ProjectileShardSystem, ItemPickupSystem, TrailSystem,
+        RenderSystem, MinimapSystem
+    )
+
+    self.player = createLocalPlayer(self.world)
+end
+
+function PlayState:spawnInitialEntities(is_joining, snapshot)
+    local spawn_x, spawn_y, ship_name, sector_x, sector_y = getSpawnParamsFromSnapshot(snapshot, "starter_drone")
+
+    if not is_joining then
+        local ship = ShipSystem.spawn(self.world, ship_name, spawn_x, spawn_y, true)
+        if sector_x and ship.sector then
+            ship.sector.x = sector_x
+            ship.sector.y = sector_y
+        end
+        linkPlayerToShip(self.player, ship)
+        self.world.local_ship = ship
+        
+        -- Generate Environment
+        local player_sector_x = (ship.sector and ship.sector.x) or 0
+        local player_sector_y = (ship.sector and ship.sector.y) or 0
+        local seed = Config.UNIVERSE_SEED or 12345
+        
+        if DefaultSector.asteroids.enabled then
+            Asteroids.spawnField(self.world, player_sector_x, player_sector_y, seed, DefaultSector.asteroids.count)
+        end
+        if DefaultSector.enemy_ships.enabled then
+            EnemySpawner.spawnField(self.world, player_sector_x, player_sector_y, seed, DefaultSector.enemy_ships.count, DefaultSector.enemy_ships)
+        end
+    else
+        print("PlayState: Joining game, waiting for server spawn...")
     end
 
-    -- Clamp zoom
-    new_zoom = math.max(Config.CAMERA_MIN_ZOOM, math.min(new_zoom, Config.CAMERA_MAX_ZOOM))
+    if snapshot and not is_joining then
+        SaveManager.apply_snapshot(self.world, self.player, self.world.local_ship, snapshot)
+    end
+end
 
-    self.world.camera:zoomTo(new_zoom)
+--
+-- NETWORK HANDLERS
+--
+
+function PlayState:handleWorldState(packet)
+    if self.world.hosting then return end
+
+    -- 1. Sync Time
+    self:syncServerTime(packet.server_time)
+
+    -- 2. Track received entities to detect removals
+    local received_ids = {}
+
+    -- 3. Update or Spawn Entities
+    for _, state in ipairs(packet.entities) do
+        received_ids[state.id] = true
+        self:syncNetworkEntity(state, packet.server_time)
+    end
+
+    -- 4. Handle Removals
+    self:processRemovals(packet.removed_ids, received_ids)
+end
+
+function PlayState:syncServerTime(server_time)
+    local now = love.timer.getTime()
+    if server_time then
+        local offset = server_time - now
+        if self.server_time_offset == nil then
+            self.server_time_offset = offset
+        elseif offset > self.server_time_offset then
+            self.server_time_offset = offset
+        else
+            -- Slowly drift to avoid jitter
+            self.server_time_offset = self.server_time_offset * 0.99 + offset * 0.01
+        end
+    end
+end
+
+function PlayState:syncNetworkEntity(state, server_time)
+    local entity = self.world.networked_entities[state.id]
+    local is_my_ship = (self.my_entity_id and state.id == self.my_entity_id)
+
+    if entity then
+        -- UPDATE EXISTING
+        if is_my_ship then
+            self:reconcileLocalPlayer(entity, state)
+        else
+            self:interpolateRemoteEntity(entity, state, server_time)
+        end
+        self:syncEntityStats(entity, state)
+    else
+        -- SPAWN NEW
+        self:spawnNetworkEntity(state, is_my_ship)
+    end
+    
+    -- Update Name Tag if applicable
+    entity = self.world.networked_entities[state.id] -- Fetch again just in case
+    if entity and entity.vehicle and not entity.ai and not entity.name then
+       self:assignPlayerName(entity, state.id)
+    end
+end
+
+function PlayState:reconcileLocalPlayer(entity, state)
+    if not entity.transform then return end
+    
+    local dx = entity.transform.x - state.x
+    local dy = entity.transform.y - state.y
+    local dist_sq = dx * dx + dy * dy
+    local snap_dist = Config.RECONCILE_SNAP_DISTANCE or 150
+    local hard_threshold = snap_dist * snap_dist
+
+    if dist_sq > hard_threshold then
+        -- Hard Snap
+        entity.transform.x, entity.transform.y = state.x, state.y
+        if entity.physics and entity.physics.body and not entity.physics.body:isDestroyed() then
+            entity.physics.body:setPosition(state.x, state.y)
+            if state.vx and state.vy then
+                entity.physics.body:setLinearVelocity(state.vx, state.vy)
+            end
+        end
+    else
+        -- Soft Reconcile
+        local blend = 0.1
+        entity.transform.x = entity.transform.x + (state.x - entity.transform.x) * blend
+        entity.transform.y = entity.transform.y + (state.y - entity.transform.y) * blend
+        
+        if entity.physics and entity.physics.body and not entity.physics.body:isDestroyed() then
+            local b = entity.physics.body
+            local bx, by = b:getPosition()
+            b:setPosition(bx + (state.x - bx) * blend, by + (state.y - by) * blend)
+            
+            if state.vx and state.vy then
+                local bvx, bvy = b:getLinearVelocity()
+                b:setLinearVelocity(bvx + (state.vx - bvx) * blend, bvy + (state.vy - bvy) * blend)
+            end
+        end
+    end
+end
+
+function PlayState:interpolateRemoteEntity(entity, state, server_time)
+    -- 1. Drift Check & Snap
+    local snap_threshold = Config.RECONCILE_ASTEROID or 50
+    if state.type == "vehicle" then snap_threshold = Config.RECONCILE_REMOTE_SHIP or 100 end
+    if state.type == "projectile" then snap_threshold = Config.RECONCILE_PROJECTILE or 25 end
+
+    local should_snap = false
+    if entity.transform then
+        local dx = entity.transform.x - state.x
+        local dy = entity.transform.y - state.y
+        if (dx * dx + dy * dy) > (snap_threshold * snap_threshold) then
+            should_snap = true
+        end
+    end
+
+    if should_snap then
+        if entity.transform then
+            entity.transform.x, entity.transform.y, entity.transform.r = state.x, state.y, state.r
+        end
+        if entity.physics and entity.physics.body and not entity.physics.body:isDestroyed() then
+            entity.physics.body:setPosition(state.x, state.y)
+            entity.physics.body:setAngle(state.r)
+            if state.vx and state.vy then entity.physics.body:setLinearVelocity(state.vx, state.vy) end
+            if state.angular_velocity then entity.physics.body:setAngularVelocity(state.angular_velocity) end
+        end
+        self.world.interpolation_buffers[state.id] = nil
+    end
+
+    -- 2. Add to Buffer
+    local buffer = self.world.interpolation_buffers[state.id]
+    if not buffer then
+        buffer = Interpolation.createBuffer()
+        self.world.interpolation_buffers[state.id] = buffer
+    end
+
+    local now = love.timer.getTime()
+    local time_offset = self.server_time_offset or 0
+    local packet_time = (server_time and (server_time + time_offset)) or now
+
+    Interpolation.addState(buffer, packet_time, state.x, state.y, state.r, state.vx, state.vy, state.angular_velocity)
+
+    if entity.sector then
+        entity.sector.x = state.sx
+        entity.sector.y = state.sy
+    end
+end
+
+function PlayState:syncEntityStats(entity, state)
+    if entity.hp and state.hp_current then entity.hp.current = state.hp_current end
+    if entity.hull and state.hull_current then
+        entity.hull.current = state.hull_current
+        if state.hull_max then entity.hull.max = state.hull_max end
+    end
+    if entity.shield and state.shield_current then
+        entity.shield.current = state.shield_current
+        if state.shield_max then entity.shield.max = state.shield_max end
+    end
+end
+
+function PlayState:spawnNetworkEntity(state, is_me)
+    local entity
+
+    if state.type == "vehicle" then
+        local ship_def = "starter_drone"
+        if state.render_type == "procedural" and state.render_seed then
+            local ProceduralShip = require "src.utils.procedural_ship"
+            ship_def = ProceduralShip.generate(state.render_seed)
+        end
+        
+        -- Pass table or string to spawn
+        entity = ShipSystem.spawn(self.world, ship_def, state.x, state.y, is_me)
+        if entity then
+            if entity.transform then entity.transform.r = state.r end
+            if entity.physics and entity.physics.body then entity.physics.body:setAngle(state.r) end
+            
+            if is_me then
+                print("Linking controls to my authoritative ship!")
+                linkPlayerToShip(self.player, entity)
+                self.world.local_ship = entity
+                if entity.render then entity.render.color = { 0.2, 1, 0.2 } end
+            end
+            print("Spawned remote vehicle id=" .. state.id)
+        end
+
+    elseif state.type == "asteroid" then
+        entity = Concord.entity(self.world)
+        entity:give("transform", state.x, state.y, state.r or 0)
+        entity:give("sector", state.sx, state.sy)
+        
+        local vertices = state.vertices
+        if not vertices and state.vertices_str then
+            vertices = {}
+            for num in string.gmatch(state.vertices_str, "[^,]+") do table.insert(vertices, tonumber(num)) end
+        end
+
+        entity:give("render", {
+            type = "asteroid",
+            color = state.color or { 0.6, 0.6, 0.6, 1 },
+            radius = state.radius or 30,
+            vertices = vertices,
+            seed = state.seed,
+        })
+        entity:give("asteroid", state.seed)
+        
+        local hp = state.hp_max or state.hp_current or 60
+        entity:give("hp", hp, state.hp_current or hp)
+
+        -- Physics
+        if self.world.physics_world then
+            local body = love.physics.newBody(self.world.physics_world, state.x, state.y, "dynamic")
+            body:setLinearDamping(Config.LINEAR_DAMPING * 2)
+            body:setAngularDamping(Config.LINEAR_DAMPING * 2)
+            body:setAngle(state.r or 0)
+
+            local shape
+            if vertices and #vertices >= 6 then
+                 -- Clamp to Box2D limit
+                local verts = ( #vertices > 16 ) and {unpack(vertices, 1, 16)} or vertices
+                pcall(function() shape = love.physics.newPolygonShape(verts) end)
+            end
+            if not shape then shape = love.physics.newCircleShape(state.radius or 30) end
+            
+            local fixture = love.physics.newFixture(body, shape, 1.0)
+            fixture:setRestitution(0.1)
+            fixture:setUserData(entity)
+            entity:give("physics", body, shape, fixture)
+            
+            if state.vx and state.vy then body:setLinearVelocity(state.vx, state.vy) end
+            if state.angular_velocity then body:setAngularVelocity(state.angular_velocity) end
+        end
+
+    elseif state.type == "asteroid_chunk" then
+         entity = Concord.entity(self.world)
+         entity:give("transform", state.x, state.y, state.r or 0)
+         entity:give("sector", state.sx, state.sy)
+         
+         local vertices = state.vertices
+         if not vertices and state.vertices_str then
+             vertices = {}
+             for num in string.gmatch(state.vertices_str, "[^,]+") do table.insert(vertices, tonumber(num)) end
+         end
+         
+         entity:give("render", {
+             render_type = "asteroid_chunk",
+             color = state.color or { 0.7, 0.7, 0.7, 1 },
+             radius = state.radius or 10,
+             vertices = vertices,
+             seed = state.seed
+         })
+         entity:give("asteroid_chunk")
+         entity:give("hp", state.hp_max or 10, state.hp_current or 10)
+         
+         if self.world.physics_world then
+             local body = love.physics.newBody(self.world.physics_world, state.x, state.y, "dynamic")
+             body:setLinearDamping(1)
+             body:setAngularDamping(1)
+             
+             local shape
+             if vertices and #vertices >= 6 then
+                 local verts = ( #vertices > 16 ) and {unpack(vertices, 1, 16)} or vertices
+                 pcall(function() shape = love.physics.newPolygonShape(verts) end)
+             end
+             if not shape then shape = love.physics.newCircleShape(state.radius or 8) end
+             
+             local fixture = love.physics.newFixture(body, shape, 0.5)
+             fixture:setRestitution(0.2)
+             fixture:setUserData(entity)
+             entity:give("physics", body, shape, fixture)
+             
+             if state.vx and state.vy then body:setLinearVelocity(state.vx, state.vy) end
+             if state.angular_velocity then body:setAngularVelocity(state.angular_velocity) end
+         end
+
+    elseif state.type == "projectile" then
+        local is_my_projectile = (self.my_entity_id and state.owner_id == self.my_entity_id)
+        if is_my_projectile then return end -- Skip local projectiles
+
+        entity = Concord.entity(self.world)
+        entity:give("transform", state.x, state.y, state.r or 0)
+        entity:give("sector", state.sx, state.sy)
+        
+        local owner = state.owner_id and self.world.networked_entities[state.owner_id]
+        entity:give("projectile", state.damage or 10, state.lifetime or 1.5, owner)
+        entity:give("render", {
+            type = "projectile",
+            color = state.color or { 1, 0.5, 0 },
+            radius = state.radius or 3,
+            length = state.length,
+            thickness = state.thickness,
+            shape = state.shape or "beam"
+        })
+        
+        if self.world.physics_world then
+            local body = love.physics.newBody(self.world.physics_world, state.x, state.y, "dynamic")
+            body:setBullet(true)
+            body:setAngle(state.r or 0)
+            local r = state.radius or 3
+            local l = state.length or (r * 4)
+            local t = state.thickness or (r * 0.7)
+            local shape = love.physics.newPolygonShape(-l/2, -t/2, l/2, -t/2, l/2, t/2, -l/2, t/2)
+            local fixture = love.physics.newFixture(body, shape, 0.1)
+            fixture:setRestitution(0)
+            fixture:setSensor(true)
+            fixture:setUserData(entity)
+            entity:give("physics", body, shape, fixture)
+            if state.vx and state.vy then body:setLinearVelocity(state.vx, state.vy) end
+        end
+
+    elseif state.type == "item" then
+        entity = Concord.entity(self.world)
+        entity:give("transform", state.x, state.y, state.r or 0)
+        entity:give("sector", state.sx, state.sy)
+        entity:give("render", { render_type = "item", color = state.color, shape = state.shape })
+        entity:give("item", state.item_type, state.item_name, state.item_volume)
+        
+        if self.world.physics_world then
+            local body = love.physics.newBody(self.world.physics_world, state.x, state.y, "kinematic")
+            body:setLinearDamping(2)
+            body:setAngularDamping(2)
+            entity:give("physics", body, nil, nil)
+             if state.vx and state.vy then body:setLinearVelocity(state.vx, state.vy) end
+             if state.angular_velocity then body:setAngularVelocity(state.angular_velocity) end
+        end
+    end
+
+    if entity then
+        entity.network_id = state.id
+        self.world.networked_entities[state.id] = entity
+        self:syncEntityStats(entity, state)
+    end
+end
+
+function PlayState:processRemovals(explicit_removals, received_ids)
+    if explicit_removals then
+        for _, net_id in ipairs(explicit_removals) do
+            if net_id ~= self.my_entity_id then
+                self:removeNetworkEntity(net_id)
+            end
+        end
+    else
+        -- Infer removals from full snapshot (missing IDs)
+        local to_remove = {}
+        for net_id, _ in pairs(self.world.networked_entities) do
+            if not received_ids[net_id] and net_id ~= self.my_entity_id then
+                table.insert(to_remove, net_id)
+            end
+        end
+        for _, net_id in ipairs(to_remove) do
+            self:removeNetworkEntity(net_id)
+        end
+    end
+end
+
+function PlayState:removeNetworkEntity(net_id)
+    local entity = self.world.networked_entities[net_id]
+    if entity then
+        EntityUtils.cleanup_physics_entity(entity)
+        self.world.networked_entities[net_id] = nil
+        self.world.interpolation_buffers[net_id] = nil
+    end
+end
+
+function PlayState:handlePlayerJoined(player_id, entity_id, player_count)
+    local name = (Client.player_id and player_id == Client.player_id) and "You" or ("Player " .. player_id)
+    Chat.system(string.format("%s joined the game.%s", name, (player_count and " Players online: " .. player_count) or ""))
+
+    if entity_id and self.world.local_ship and entity_id ~= 0 then
+        if not self.world.local_ship.network_id then -- If we haven't been assigned one yet
+            self.world.local_ship.network_id = entity_id
+            self.world.networked_entities[entity_id] = self.world.local_ship
+            print("Registered local ship with network_id=" .. entity_id)
+        end
+        self.player_entity_ids[player_id] = entity_id
+    end
+end
+
+function PlayState:handlePlayerLeft(player_id, player_count)
+    local name = (Client.player_id and player_id == Client.player_id) and "You" or ("Player " .. player_id)
+    Chat.system(string.format("%s left the game.%s", name, (player_count and " Players online: " .. player_count) or ""))
+    
+    local entity_id = self.player_entity_ids[player_id]
+    if entity_id then
+        self.player_entity_ids[player_id] = nil
+        local entity = self.world.networked_entities[entity_id]
+        if entity and entity ~= self.world.local_ship then
+             self:removeNetworkEntity(entity_id)
+        end
+    end
+end
+
+function PlayState:handleWelcome(player_id, entity_id)
+    self.my_entity_id = entity_id
+    if player_id and entity_id and entity_id ~= 0 then
+        self.player_entity_ids[player_id] = entity_id
+    end
+end
+
+function PlayState:assignPlayerName(entity, entity_id)
+    local owner_id
+    for pid, eid in pairs(self.player_entity_ids) do
+        if eid == entity_id then owner_id = pid; break end
+    end
+    
+    if owner_id then
+        local label = (Client.player_id and owner_id == Client.player_id) and (Config.PLAYER_NAME or "Player") or ("Player " .. owner_id)
+        entity:give("name", label)
+    end
+end
+
+--
+-- UPDATE LOOPS
+--
+
+function PlayState:updateNetwork(dt)
+    if self.world.hosting then
+        local Server = require "src.network.server"
+        Server.update(dt)
+    end
+    Client.update(dt)
+end
+
+function PlayState:updateControls()
+    if Chat.isActive() or (self.world and self.world.player_dead) then
+        self.world.controlsEnabled = false
+    else
+        self.world.controlsEnabled = true
+    end
+end
+
+function PlayState:updateInterpolation(dt)
+    -- Calculate Delay
+    local delay = Interpolation.getBaseDelay()
+    if Client.connected and Client.ping and Client.ping > 0 then
+        local dynamic = (Client.ping / 1000) * 0.5
+        delay = math.max(delay, math.min(dynamic, 0.35))
+    end
+
+    for id, buffer in pairs(self.world.interpolation_buffers) do
+        local entity = self.world.networked_entities[id]
+        if entity then
+            local effective_delay = delay + ((entity.vehicle and id ~= self.my_entity_id) and 0.03 or 0)
+            local state = Interpolation.getInterpolatedState(buffer, effective_delay)
+            
+            if state then
+                if entity.transform then
+                    entity.transform.x, entity.transform.y, entity.transform.r = state.x, state.y, state.r
+                end
+                if entity.physics and entity.physics.body and not entity.physics.body:isDestroyed() then
+                    entity.physics.body:setPosition(state.x, state.y)
+                    entity.physics.body:setAngle(state.r)
+                    if state.vx and state.vy then entity.physics.body:setLinearVelocity(state.vx, state.vy) end
+                    if state.angular_velocity then entity.physics.body:setAngularVelocity(state.angular_velocity) end
+                end
+            end
+        elseif Interpolation.isStale(buffer) then
+             self.world.interpolation_buffers[id] = nil
+        end
+    end
+end
+
+function PlayState:sendClientInput()
+    if not self.world.hosting and Client.connected and self.world.local_ship and self.world.local_ship.input then
+        local input = self.world.local_ship.input
+        local t = self.world.local_ship.transform
+        Client.sendInput(
+            input.move_x or 0, input.move_y or 0, input.fire or false, input.target_angle or 0,
+            t.x, t.y, t.r
+        )
+    end
+end
+
+function PlayState:updateHover()
+    if not (self.world and self.world.camera and self.world.ui) then return end
+
+    local mx, my = love.mouse.getPosition()
+    local wx, wy = self.world.camera:worldCoords(mx, my)
+    
+    local ship = self.world.local_ship
+    local ship_sx = (ship and ship.sector and ship.sector.x) or 0
+    local ship_sy = (ship and ship.sector and ship.sector.y) or 0
+
+    local best, bestDist2
+    for _, e in ipairs(self.world:getEntities()) do
+        if (e.asteroid or e.asteroid_chunk or e.vehicle) and e.transform and e.render then
+            local sx, sy = (e.sector and e.sector.x or 0), (e.sector and e.sector.y or 0)
+            
+            if math.abs(sx - ship_sx) <= 1 and math.abs(sy - ship_sy) <= 1 then
+                local ex = e.transform.x + (sx - ship_sx) * DefaultSector.SECTOR_SIZE
+                local ey = e.transform.y + (sy - ship_sy) * DefaultSector.SECTOR_SIZE
+                local dx, dy = wx - ex, wy - ey
+                local dist2 = dx*dx + dy*dy
+                local r = e.render.radius * 1.2
+                
+                if dist2 <= r*r and (not bestDist2 or dist2 < bestDist2) then
+                    best = e
+                    bestDist2 = dist2
+                end
+            end
+        end
+    end
+    self.world.ui.hover_target = best
+end
+
+function PlayState:respawnLocalPlayer()
+    if not self.world.hosting and not Client.connected then
+        local ship = ShipSystem.spawn(self.world, "starter_drone", 0, 0, true)
+        if ship then
+            self.world.local_ship = ship
+            linkPlayerToShip(self.player, ship)
+            self.world.player_dead = false
+            self.world.player_death_time = nil
+        end
+    end
+end
+
+function PlayState:startHosting()
+    local Server = require "src.network.server"
+    if Server.start(25565, self.world) then
+        self.world.hosting = true
+        self.world.server = Server
+        print("Hosting server on port 25565")
+        
+        -- Hook up Server-side chat
+        Server.setChatCallback(function(pid, msg)
+            local sender = (pid == 0) and "Host" or ("Player " .. pid)
+            Chat.addMessage(sender .. ": " .. msg, "text")
+        end)
+        
+        -- Sync host ship
+        if self.world.local_ship then
+            self.world.local_ship.network_id = Server.next_network_id
+            Server.next_network_id = Server.next_network_id + 1
+        end
+        
+        -- Sync existing entities
+        for _, e in ipairs(self.world:getEntities()) do
+            if (e.asteroid or e.asteroid_chunk or e.projectile or e.vehicle or e.item) and not e.network_id then
+                e.network_id = Server.next_network_id
+                Server.next_network_id = Server.next_network_id + 1
+            end
+        end
+    end
 end
 
 return PlayState

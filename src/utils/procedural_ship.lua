@@ -440,6 +440,7 @@ function ProceduralShip.generate(seed)
     return {
         name = "Unknown Ship",
         type = "procedural",
+        seed = seed,
 
         -- Physics
         mass = mass,

@@ -225,7 +225,7 @@ function Protocol.createEntityState(entity)
         state.shield_max = entity.shield.max
     end
 
-    -- Add rendering properties for asteroids and projectiles
+    -- Add rendering properties for asteroids, projectiles, items, and procedural ships
     if entity.render then
         if state.type == "asteroid" or state.type == "asteroid_chunk" then
             state.radius = entity.render.radius
@@ -259,6 +259,20 @@ function Protocol.createEntityState(entity)
             elseif state.type == "asteroid_chunk" then
                 if entity.render.seed then
                     state.seed = entity.render.seed
+                end
+            end
+        elseif state.type == "vehicle" then
+            -- Sync minimal render info for procedural ships (enemies)
+            if entity.render.type == "procedural" then
+                state.render_type = "procedural"
+                if entity.render.seed then
+                    state.render_seed = entity.render.seed
+                end
+                if entity.render.radius then
+                    state.radius = entity.render.radius
+                end
+                if entity.render.color then
+                    state.color = entity.render.color
                 end
             end
         elseif state.type == "projectile" then

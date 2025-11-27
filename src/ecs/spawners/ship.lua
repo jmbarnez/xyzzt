@@ -37,7 +37,8 @@ function ShipManager.spawn(world, ship_def, x, y, is_host_player)
             type = "procedural",
             color = color,
             radius = data.radius,
-            render_data = data.render_data -- Store full render data
+            render_data = data.render_data, -- Store full render data
+            seed = data.seed,
         })
     else
         ship:give("render", {

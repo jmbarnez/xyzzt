@@ -26,6 +26,11 @@ function PhysicsSystem:handleBeginContact(fixtureA, fixtureB, contact)
         return
     end
 
+    if (entityA.projectile and entityB.item)
+        or (entityB.projectile and entityA.item) then
+        return
+    end
+
     -- Ignore collisions between projectile and owner
     if (entityA.projectile and entityA.projectile.owner == entityB)
         or (entityB.projectile and entityB.projectile.owner == entityA) then
@@ -47,11 +52,93 @@ function PhysicsSystem:handlePreSolve(fixtureA, fixtureB, contact)
         return
     end
 
+    if (entityA.projectile and entityB.item)
+        or (entityB.projectile and entityA.item) then
+        contact:setEnabled(false)
+        return
+    end
+
     -- Disable physical response between projectile and owner
     if (entityA.projectile and entityA.projectile.owner == entityB)
         or (entityB.projectile and entityB.projectile.owner == entityA) then
         contact:setEnabled(false)
     end
+end
+
+function PhysicsSystem:applyWorldBounds(e, body, half_size, is_player)
+    if not (e and body and half_size) then return body:getPosition() end
+
+    local x, y = body:getPosition()
+    local vx, vy = body:getLinearVelocity()
+    local r = body:getAngle()
+
+    if e.projectile then
+        if x > half_size or x < -half_size or y > half_size or y < -half_size then
+            if e.projectile then
+                e.projectile.lifetime = 0
+            end
+        end
+        return x, y, r
+    end
+
+    if e.item then
+        local clamped_x, clamped_y = x, y
+        local hit_edge = false
+
+        if clamped_x > half_size then
+            clamped_x = half_size
+            hit_edge = true
+        elseif clamped_x < -half_size then
+            clamped_x = -half_size
+            hit_edge = true
+        end
+
+        if clamped_y > half_size then
+            clamped_y = half_size
+            hit_edge = true
+        elseif clamped_y < -half_size then
+            clamped_y = -half_size
+            hit_edge = true
+        end
+
+        if hit_edge then
+            body:setPosition(clamped_x, clamped_y)
+            body:setLinearVelocity(0, 0)
+            x, y = clamped_x, clamped_y
+        end
+
+        return x, y, r
+    end
+
+    local bounce_factor = 0.5 -- Lose some energy
+    local bounced = false
+
+    if x > half_size then
+        x = half_size
+        vx = -math.abs(vx) * bounce_factor -- Ensure velocity points inward
+        bounced = true
+    elseif x < -half_size then
+        x = -half_size
+        vx = math.abs(vx) * bounce_factor -- Ensure velocity points inward
+        bounced = true
+    end
+
+    if y > half_size then
+        y = half_size
+        vy = -math.abs(vy) * bounce_factor -- Ensure velocity points inward
+        bounced = true
+    elseif y < -half_size then
+        y = -half_size
+        vy = math.abs(vy) * bounce_factor -- Ensure velocity points inward
+        bounced = true
+    end
+
+    if bounced then
+        body:setPosition(x, y)
+        body:setLinearVelocity(vx, vy)
+    end
+
+    return x, y, r
 end
 
 function PhysicsSystem:update(dt)
@@ -85,65 +172,14 @@ function PhysicsSystem:update(dt)
         local s = e.sector
 
         if body then
-            local x, y = body:getPosition()
-            local r = body:getAngle()
-            local sector_changed = false
+            local x, y, r
 
             if e.pilot then
                 -- Clamp player to sector bounds and bounce
-                local vx, vy = body:getLinearVelocity()
-                local bounced = false
-                local bounce_factor = 0.5 -- Lose some energy
-
-                if x > half_size then
-                    x = half_size
-                    vx = -math.abs(vx) * bounce_factor -- Ensure velocity points inward
-                    bounced = true
-                elseif x < -half_size then
-                    x = -half_size
-                    vx = math.abs(vx) * bounce_factor -- Ensure velocity points inward
-                    bounced = true
-                end
-
-                if y > half_size then
-                    y = half_size
-                    vy = -math.abs(vy) * bounce_factor -- Ensure velocity points inward
-                    bounced = true
-                elseif y < -half_size then
-                    y = -half_size
-                    vy = math.abs(vy) * bounce_factor -- Ensure velocity points inward
-                    bounced = true
-                end
-
-                if bounced then
-                    body:setPosition(x, y)
-                    body:setLinearVelocity(vx, vy)
-                end
+                x, y, r = self:applyWorldBounds(e, body, half_size, true)
             else
                 -- Wrap other entities
-                if x > half_size then
-                    x = x - DefaultSector.SECTOR_SIZE
-                    s.x = s.x + 1
-                    sector_changed = true
-                elseif x < -half_size then
-                    x = x + DefaultSector.SECTOR_SIZE
-                    s.x = s.x - 1
-                    sector_changed = true
-                end
-
-                if y > half_size then
-                    y = y - DefaultSector.SECTOR_SIZE
-                    s.y = s.y + 1
-                    sector_changed = true
-                elseif y < -half_size then
-                    y = y + DefaultSector.SECTOR_SIZE
-                    s.y = s.y - 1
-                    sector_changed = true
-                end
-
-                if sector_changed then
-                    body:setPosition(x, y)
-                end
+                x, y, r = self:applyWorldBounds(e, body, half_size, false)
             end
 
             -- Sync visual transform
