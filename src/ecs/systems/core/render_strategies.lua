@@ -539,6 +539,99 @@ function RenderStrategies.ship(e)
     end
 end
 
+function RenderStrategies.procedural(e)
+    local r = e.render
+    if not r or not r.render_data then return end
+
+    local data = r.render_data
+
+    -- Color tint (e.g. red for enemies, green for allies)
+    local tint = r.color or { 1, 1, 1, 1 }
+
+    -- 1. Draw Main Hull
+    -- Use base color from data, tinted by entity color
+    local base_color = data.base_color or { 0.5, 0.5, 0.5, 1 }
+    love.graphics.setColor(
+        base_color[1] * tint[1],
+        base_color[2] * tint[2],
+        base_color[3] * tint[3],
+        base_color[4] or 1
+    )
+
+    if data.hull then
+        love.graphics.polygon("fill", data.hull)
+
+        -- Hull Outline
+        love.graphics.setColor(0, 0, 0, 0.8)
+        love.graphics.setLineWidth(2)
+        love.graphics.polygon("line", data.hull)
+    end
+
+    -- 2. Draw Panel Lines (Surface Details)
+    if data.panel_lines then
+        local detail_color = data.detail_color or { 0.3, 0.3, 0.3, 1 }
+        love.graphics.setColor(
+            detail_color[1] * tint[1],
+            detail_color[2] * tint[2],
+            detail_color[3] * tint[3],
+            0.4
+        )
+        love.graphics.setLineWidth(1)
+        for _, line in ipairs(data.panel_lines) do
+            if line.x1 and line.y1 and line.x2 and line.y2 then
+                love.graphics.line(line.x1, line.y1, line.x2, line.y2)
+            end
+        end
+    end
+
+    -- 3. Draw Cockpit
+    if data.cockpit and #data.cockpit >= 6 then
+        local accent_color = data.accent_color or { 0, 0.8, 1, 1 }
+
+        -- Cockpit Base
+        love.graphics.setColor(
+            accent_color[1],
+            accent_color[2],
+            accent_color[3],
+            0.6
+        )
+        love.graphics.polygon("fill", data.cockpit)
+
+        -- Cockpit Glass Highlight
+        love.graphics.setColor(0.6, 0.8, 1, 0.3)
+        love.graphics.polygon("fill", data.cockpit)
+    end
+
+    -- 4. Draw Weapon Hardpoints
+    if data.weapon_hardpoints then
+        love.graphics.setColor(0.2, 0.2, 0.2, 0.8)
+        for _, wp in ipairs(data.weapon_hardpoints) do
+            love.graphics.circle("fill", wp.x, wp.y, 1.5)
+        end
+    end
+
+    -- 5. Draw Engines
+    if data.engines then
+        for _, eng in ipairs(data.engines) do
+            local eng_color = eng.color or { 0, 1, 1, 1 }
+
+            -- Outer Glow
+            love.graphics.setColor(eng_color[1], eng_color[2], eng_color[3], 0.3)
+            love.graphics.circle("fill", eng.x, eng.y, eng.radius * 1.5)
+
+            -- Inner Core
+            love.graphics.setColor(eng_color[1], eng_color[2], eng_color[3], 0.8)
+            love.graphics.circle("fill", eng.x, eng.y, eng.radius * 0.8)
+
+            -- Bright Center
+            love.graphics.setColor(1, 1, 1, 0.6)
+            love.graphics.circle("fill", eng.x, eng.y, eng.radius * 0.3)
+        end
+    end
+
+    love.graphics.setLineWidth(1)
+end
+
 function RenderStrategies.fallback(e)
     local r = e.render
 
@@ -574,6 +667,7 @@ local DrawStrategies = {
     item = RenderStrategies.item,
     projectile = RenderStrategies.projectile,
     ship = RenderStrategies.ship,
+    procedural = RenderStrategies.procedural,
 }
 
 local function resolve_type_key(e)
@@ -582,7 +676,7 @@ local function resolve_type_key(e)
     if type(r) == "table" and r.type then
         if r.type == "asteroid" or r.type == "asteroid_chunk" or
             r.type == "projectile_shard" or r.type == "item" or
-            r.type == "projectile" then
+            r.type == "projectile" or r.type == "procedural" then
             return r.type
         else
             return "ship"

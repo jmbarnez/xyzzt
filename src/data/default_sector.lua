@@ -2,6 +2,9 @@
 -- This defines what gets spawned in a standard sector
 
 return {
+    -- World / Sector Configuration
+    SECTOR_SIZE = 2000, -- The width/height of one "Sector" before coordinates wrap
+
     -- Asteroid field configuration
     asteroids = {
         enabled = true,
@@ -11,8 +14,8 @@ return {
 
     -- Enemy ship configuration
     enemy_ships = {
-        enabled = false,
-        count = 3,                       -- Number of enemy ships per sector
+        enabled = true,
+        count = 1,                       -- Number of enemy ships per sector
         ship_name = "starter_drone",     -- All enemies use this ship
         -- Spatial distribution parameters
         min_distance_from_origin = 100,  -- Don't spawn too close to player start

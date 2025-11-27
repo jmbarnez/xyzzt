@@ -31,11 +31,22 @@ function ShipManager.spawn(world, ship_def, x, y, is_host_player)
     -- Render: Host green, others red. Attach shapes data.
     local color = is_host_player and { 0.2, 1, 0.2 } or { 1, 0.2, 0.2 }
 
-    ship:give("render", {
-        type = "ship",
-        color = color,
-        shapes = data.render_data and data.render_data.shapes -- Pass the shapes
-    })
+    -- Check if this is a procedural ship
+    if data.type == "procedural" and data.render_data then
+        ship:give("render", {
+            type = "procedural",
+            color = color,
+            radius = data.radius,
+            render_data = data.render_data -- Store full render data
+        })
+    else
+        ship:give("render", {
+            type = "ship",
+            color = color,
+            radius = data.radius,
+            shapes = data.render_data and data.render_data.shapes -- Pass the shapes
+        })
+    end
 
     if is_host_player then
         ship:give("name", Config.PLAYER_NAME or "Player")

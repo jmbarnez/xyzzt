@@ -390,6 +390,20 @@ function PlayState:enter(prev, param)
                 if entity.hp and state.hp_current then
                     entity.hp.current = state.hp_current
                 end
+
+                if entity.hull and state.hull_current then
+                    entity.hull.current = state.hull_current
+                    if state.hull_max then
+                        entity.hull.max = state.hull_max
+                    end
+                end
+
+                if entity.shield and state.shield_current then
+                    entity.shield.current = state.shield_current
+                    if state.shield_max then
+                        entity.shield.max = state.shield_max
+                    end
+                end
             else
                 -- Spawn new remote entity if it doesn't exist
                 if state.type == "vehicle" then
@@ -419,6 +433,20 @@ function PlayState:enter(prev, param)
                         end
                         if ship.hp and state.hp_current then
                             ship.hp.current = state.hp_current
+                        end
+
+                        if ship.hull and state.hull_current then
+                            ship.hull.current = state.hull_current
+                            if state.hull_max then
+                                ship.hull.max = state.hull_max
+                            end
+                        end
+
+                        if ship.shield and state.shield_current then
+                            ship.shield.current = state.shield_current
+                            if state.shield_max then
+                                ship.shield.max = state.shield_max
+                            end
                         end
 
                         -- Track this entity
@@ -698,6 +726,31 @@ function PlayState:enter(prev, param)
                     self.world.networked_entities[state.id] = item
                 end
             end
+
+            local named_entity = self.world.networked_entities[state.id]
+            if named_entity and named_entity.vehicle and not named_entity.ai and not named_entity.name then
+                local owner_player_id = nil
+                if self.player_entity_ids then
+                    for pid, eid in pairs(self.player_entity_ids) do
+                        if eid == state.id then
+                            owner_player_id = pid
+                            break
+                        end
+                    end
+                end
+
+                if owner_player_id then
+                    local label
+                    local Client = require "src.network.client"
+                    if Client.player_id and owner_player_id == Client.player_id then
+                        label = Config.PLAYER_NAME or "Player"
+                    else
+                        label = "Player " .. tostring(owner_player_id)
+                    end
+
+                    named_entity:give("name", label)
+                end
+            end
         end
 
         -- Removals
@@ -740,7 +793,7 @@ function PlayState:enter(prev, param)
 
     Client.setPlayerJoinedCallback(function(player_id, entity_id, player_count)
         print("Player joined: player_id=" ..
-        player_id .. ", entity_id=" .. tostring(entity_id) .. ", count=" .. tostring(player_count or "?"))
+            player_id .. ", entity_id=" .. tostring(entity_id) .. ", count=" .. tostring(player_count or "?"))
 
         local name = "Player " .. tostring(player_id)
         if Client.player_id and player_id == Client.player_id then
@@ -888,7 +941,7 @@ function PlayState:enter(prev, param)
     end
 
     -- Spawn enemy ships in starting sector
-    if DefaultSector.enemy_ships.enabled then
+    if DefaultSector.enemy_ships.enabled and not is_joining then
         EnemySpawner.spawnField(
             self.world,
             player_sector_x,
@@ -1000,8 +1053,8 @@ function PlayState:update(dt)
 
                 -- Optimization: Only check entities in neighbor sectors
                 if math.abs(diff_x) <= 1 and math.abs(diff_y) <= 1 then
-                    local ex = t.x + diff_x * Config.SECTOR_SIZE
-                    local ey = t.y + diff_y * Config.SECTOR_SIZE
+                    local ex = t.x + diff_x * DefaultSector.SECTOR_SIZE
+                    local ey = t.y + diff_y * DefaultSector.SECTOR_SIZE
                     local dx = wx - ex
                     local dy = wy - ey
                     local dist2 = dx * dx + dy * dy
@@ -1091,7 +1144,7 @@ function PlayState:keypressed(key)
             -- Retroactively assign network IDs to all existing asteroids, asteroid chunks, and projectiles
             -- This is CRITICAL: entities spawned at game start (before hosting) need IDs to be synced!
             for _, e in ipairs(self.world:getEntities()) do
-                if (e.asteroid or e.asteroid_chunk or e.projectile) and not e.network_id then
+                if (e.asteroid or e.asteroid_chunk or e.projectile or e.vehicle or e.item) and not e.network_id then
                     e.network_id = Server.next_network_id
                     Server.next_network_id = Server.next_network_id + 1
                 end

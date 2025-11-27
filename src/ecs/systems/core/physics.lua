@@ -1,5 +1,6 @@
 local Concord = require "lib.concord.concord"
 local Config = require "src.config"
+local DefaultSector = require "src.data.default_sector"
 
 local PhysicsSystem = Concord.system({
     pool = { "physics", "transform", "sector" }
@@ -67,7 +68,7 @@ function PhysicsSystem:update(dt)
     end
 
     -- 2. Handle Sector Wrapping (Infinite Universe)
-    local half_size = Config.SECTOR_SIZE / 2
+    local half_size = DefaultSector.SECTOR_SIZE / 2
 
     for _, e in ipairs(self.pool) do
         local body = e.physics.body
@@ -112,21 +113,21 @@ function PhysicsSystem:update(dt)
             else
                 -- Wrap other entities
                 if x > half_size then
-                    x = x - Config.SECTOR_SIZE
+                    x = x - DefaultSector.SECTOR_SIZE
                     s.x = s.x + 1
                     sector_changed = true
                 elseif x < -half_size then
-                    x = x + Config.SECTOR_SIZE
+                    x = x + DefaultSector.SECTOR_SIZE
                     s.x = s.x - 1
                     sector_changed = true
                 end
 
                 if y > half_size then
-                    y = y - Config.SECTOR_SIZE
+                    y = y - DefaultSector.SECTOR_SIZE
                     s.y = s.y + 1
                     sector_changed = true
                 elseif y < -half_size then
-                    y = y + Config.SECTOR_SIZE
+                    y = y + DefaultSector.SECTOR_SIZE
                     s.y = s.y - 1
                     sector_changed = true
                 end

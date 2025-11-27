@@ -215,6 +215,16 @@ function Protocol.createEntityState(entity)
         state.hp_max = entity.hp.max
     end
 
+    if entity.hull then
+        state.hull_current = entity.hull.current
+        state.hull_max = entity.hull.max
+    end
+
+    if entity.shield then
+        state.shield_current = entity.shield.current
+        state.shield_max = entity.shield.max
+    end
+
     -- Add rendering properties for asteroids and projectiles
     if entity.render then
         if state.type == "asteroid" or state.type == "asteroid_chunk" then

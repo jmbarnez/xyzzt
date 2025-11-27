@@ -2,85 +2,365 @@ local Config = require "src.config"
 
 local ProceduralShip = {}
 
--- Helper to generate a random color
-local function randomColor(rng)
-    return {
-        rng:random() * 0.5 + 0.5, -- R (bright)
-        rng:random() * 0.5 + 0.5, -- G (bright)
-        rng:random() * 0.5 + 0.5, -- B (bright)
-        1
-    }
+-- Helper to generate a random color with specific hue tendencies
+local function randomColor(rng, hue_bias)
+    if hue_bias == "warm" then
+        return {
+            0.7 + rng:random() * 0.3, -- High R
+            0.3 + rng:random() * 0.4, -- Med G
+            0.1 + rng:random() * 0.2, -- Low B
+            1
+        }
+    elseif hue_bias == "cool" then
+        return {
+            0.2 + rng:random() * 0.3, -- Low R
+            0.4 + rng:random() * 0.4, -- Med G
+            0.7 + rng:random() * 0.3, -- High B
+            1
+        }
+    elseif hue_bias == "neutral" then
+        local v = 0.5 + rng:random() * 0.4
+        return { v, v, v, 1 }
+    else
+        return {
+            0.5 + rng:random() * 0.5,
+            0.5 + rng:random() * 0.5,
+            0.5 + rng:random() * 0.5,
+            1
+        }
+    end
 end
 
--- Helper to generate a random polygon for the ship hull
-local function generateHull(rng, radius)
+-- Generate a sleek spaceship hull with front point, wings, and rear
+local function generateSpaceshipHull(rng, length, width)
+    -- Ship points forward (to the right, +X direction)
     local points = {}
-    local num_points = rng:random(5, 12)
-    for i = 1, num_points do
-        local angle = (i / num_points) * math.pi * 2
-        local r = radius * (0.5 + rng:random() * 0.5)
-        table.insert(points, math.cos(angle) * r)
-        table.insert(points, math.sin(angle) * r)
-    end
+
+    -- Front tip (nose)
+    local nose_x = length * 0.5
+    local nose_sharpness = 0.7 + rng:random() * 0.3 -- How pointy the nose is
+
+    -- Main body width variation
+    local body_width = width * (0.8 + rng:random() * 0.2)
+    local rear_width = body_width * (0.4 + rng:random() * 0.3)
+
+    -- Asymmetry factor (slightRandomVariation for organic feel)
+    local asym_top = 1.0 + (rng:random() - 0.5) * 0.1
+    local asym_bot = 1.0 + (rng:random() - 0.5) * 0.1
+
+    -- Define ship profile (clockwise from nose, top side first)
+    -- Nose tip
+    table.insert(points, nose_x)
+    table.insert(points, 0)
+
+    -- Top side (going back from nose)
+    -- Upper cockpit area
+    local cockpit_x = length * (0.2 + rng:random() * 0.1)
+    local cockpit_y = -body_width * 0.3 * asym_top
+    table.insert(points, cockpit_x)
+    table.insert(points, cockpit_y)
+
+    -- Top wing leading edge
+    local wing_front_x = length * (0.05 + rng:random() * 0.1)
+    local wing_front_y = -body_width * (0.5 + rng:random() * 0.2) * asym_top
+    table.insert(points, wing_front_x)
+    table.insert(points, wing_front_y)
+
+    -- Top wing tip (widest point)
+    local wing_tip_x = -length * (0.15 + rng:random() * 0.1)
+    local wing_tip_y = -body_width * (0.55 + rng:random() * 0.15) * asym_top
+    table.insert(points, wing_tip_x)
+    table.insert(points, wing_tip_y)
+
+    -- Top wing trailing edge (back to body)
+    local wing_back_x = -length * (0.3 + rng:random() * 0.1)
+    local wing_back_y = -rear_width * 0.5 * asym_top
+    table.insert(points, wing_back_x)
+    table.insert(points, wing_back_y)
+
+    -- Rear top (engine mount area)
+    local rear_x = -length * 0.5
+    local rear_top_y = -rear_width * (0.4 + rng:random() * 0.1) * asym_top
+    table.insert(points, rear_x)
+    table.insert(points, rear_top_y)
+
+    -- Rear center top (engine cutout)
+    table.insert(points, rear_x + length * 0.05)
+    table.insert(points, -rear_width * 0.15 * asym_top)
+
+    -- Center rear (between engines)
+    table.insert(points, rear_x)
+    table.insert(points, 0)
+
+    -- Rear center bottom (engine cutout)
+    table.insert(points, rear_x + length * 0.05)
+    table.insert(points, rear_width * 0.15 * asym_bot)
+
+    -- Rear bottom (engine mount area)
+    table.insert(points, rear_x)
+    table.insert(points, rear_width * (0.4 + rng:random() * 0.1) * asym_bot)
+
+    -- Bottom wing trailing edge
+    local wing_back_x_bot = -length * (0.3 + rng:random() * 0.1)
+    local wing_back_y_bot = rear_width * 0.5 * asym_bot
+    table.insert(points, wing_back_x_bot)
+    table.insert(points, wing_back_y_bot)
+
+    -- Bottom wing tip
+    local wing_tip_x_bot = -length * (0.15 + rng:random() * 0.1)
+    local wing_tip_y_bot = body_width * (0.55 + rng:random() * 0.15) * asym_bot
+    table.insert(points, wing_tip_x_bot)
+    table.insert(points, wing_tip_y_bot)
+
+    -- Bottom wing leading edge
+    local wing_front_x_bot = length * (0.05 + rng:random() * 0.1)
+    local wing_front_y_bot = body_width * (0.5 + rng:random() * 0.2) * asym_bot
+    table.insert(points, wing_front_x_bot)
+    table.insert(points, wing_front_y_bot)
+
+    -- Bottom cockpit area
+    local cockpit_y_bot = body_width * 0.3 * asym_bot
+    table.insert(points, cockpit_x)
+    table.insert(points, cockpit_y_bot)
+
+    -- Back to nose (loop complete)
+
     return points
+end
+
+-- Generate cockpit/detail overlay
+local function generateCockpitDetail(rng, length, width)
+    local points = {}
+    local cockpit_length = length * (0.3 + rng:random() * 0.2)
+    local cockpit_width = width * (0.15 + rng:random() * 0.15)
+
+    -- Simple diamond shape for cockpit
+    local front = length * (0.35 + rng:random() * 0.1)
+    local back = length * (0.1 + rng:random() * 0.1)
+
+    table.insert(points, front)
+    table.insert(points, 0)
+
+    table.insert(points, (front + back) * 0.5)
+    table.insert(points, -cockpit_width * 0.5)
+
+    table.insert(points, back)
+    table.insert(points, 0)
+
+    table.insert(points, (front + back) * 0.5)
+    table.insert(points, cockpit_width * 0.5)
+
+    return points
+end
+
+-- Generate engine glow positions
+local function generateEngines(rng, hull_points, length, width)
+    local engines = {}
+
+    -- Ships have 2-4 engines at the rear
+    local num_engines = rng:random(2, 4)
+    local rear_x = -length * 0.5
+    local engine_width = width * 0.15
+
+    if num_engines == 2 then
+        -- Two engines, top and bottom
+        table.insert(engines, {
+            x = rear_x,
+            y = -width * (0.25 + rng:random() * 0.15),
+            radius = engine_width,
+            color = { 0.3, 0.7 + rng:random() * 0.3, 1, 0.9 }
+        })
+        table.insert(engines, {
+            x = rear_x,
+            y = width * (0.25 + rng:random() * 0.15),
+            radius = engine_width,
+            color = { 0.3, 0.7 + rng:random() * 0.3, 1, 0.9 }
+        })
+    elseif num_engines == 3 then
+        -- Three engines, top, center, bottom
+        table.insert(engines, {
+            x = rear_x,
+            y = -width * 0.3,
+            radius = engine_width * 0.8,
+            color = { 0.3, 0.7 + rng:random() * 0.3, 1, 0.9 }
+        })
+        table.insert(engines, {
+            x = rear_x,
+            y = 0,
+            radius = engine_width,
+            color = { 0.3, 0.7 + rng:random() * 0.3, 1, 0.9 }
+        })
+        table.insert(engines, {
+            x = rear_x,
+            y = width * 0.3,
+            radius = engine_width * 0.8,
+            color = { 0.3, 0.7 + rng:random() * 0.3, 1, 0.9 }
+        })
+    else -- 4 engines
+        table.insert(engines, {
+            x = rear_x,
+            y = -width * 0.35,
+            radius = engine_width * 0.7,
+            color = { 0.3, 0.7 + rng:random() * 0.3, 1, 0.9 }
+        })
+        table.insert(engines, {
+            x = rear_x,
+            y = -width * 0.15,
+            radius = engine_width * 0.7,
+            color = { 0.3, 0.7 + rng:random() * 0.3, 1, 0.9 }
+        })
+        table.insert(engines, {
+            x = rear_x,
+            y = width * 0.15,
+            radius = engine_width * 0.7,
+            color = { 0.3, 0.7 + rng:random() * 0.3, 1, 0.9 }
+        })
+        table.insert(engines, {
+            x = rear_x,
+            y = width * 0.35,
+            radius = engine_width * 0.7,
+            color = { 0.3, 0.7 + rng:random() * 0.3, 1, 0.9 }
+        })
+    end
+
+    return engines
+end
+
+-- Generate weapon hardpoints
+local function generateWeaponHardpoints(rng, length, width)
+    local hardpoints = {}
+    local num_weapons = rng:random(2, 4)
+
+    -- Weapons typically on wings or nose
+    if num_weapons >= 2 then
+        -- Wing-mounted
+        local weapon_x = length * (0.1 + rng:random() * 0.2)
+        table.insert(hardpoints, {
+            x = weapon_x,
+            y = -width * (0.4 + rng:random() * 0.1),
+            type = "wing_cannon"
+        })
+        table.insert(hardpoints, {
+            x = weapon_x,
+            y = width * (0.4 + rng:random() * 0.1),
+            type = "wing_cannon"
+        })
+    end
+
+    if num_weapons >= 4 then
+        -- Nose-mounted
+        table.insert(hardpoints, {
+            x = length * 0.4,
+            y = -width * 0.1,
+            type = "nose_cannon"
+        })
+        table.insert(hardpoints, {
+            x = length * 0.4,
+            y = width * 0.1,
+            type = "nose_cannon"
+        })
+    end
+
+    return hardpoints
+end
+
+-- Generate panel lines / details
+local function generatePanelLines(rng, length, width)
+    local lines = {}
+    local num_lines = rng:random(3, 6)
+
+    for i = 1, num_lines do
+        local line_type = rng:random(1, 3)
+
+        if line_type == 1 then
+            -- Longitudinal line (runs front to back)
+            local y_pos = (rng:random() - 0.5) * width * 0.6
+            table.insert(lines, {
+                type = "line",
+                x1 = length * (0.3 - rng:random() * 0.1),
+                y1 = y_pos,
+                x2 = -length * (0.2 + rng:random() * 0.1),
+                y2 = y_pos
+            })
+        elseif line_type == 2 then
+            -- Cross section line
+            local x_pos = length * (rng:random() - 0.5) * 0.6
+            local line_width = width * (0.3 + rng:random() * 0.4)
+            table.insert(lines, {
+                type = "line",
+                x1 = x_pos,
+                y1 = -line_width * 0.5,
+                x2 = x_pos,
+                y2 = line_width * 0.5
+            })
+        else
+            -- Diagonal detail
+            local start_x = length * (rng:random() * 0.3)
+            local start_y = (rng:random() - 0.5) * width * 0.5
+            local end_x = start_x - length * (0.2 + rng:random() * 0.2)
+            local end_y = start_y + (rng:random() - 0.5) * width * 0.3
+            table.insert(lines, {
+                type = "line",
+                x1 = start_x,
+                y1 = start_y,
+                x2 = end_x,
+                y2 = end_y
+            })
+        end
+    end
+
+    return lines
 end
 
 function ProceduralShip.generate(seed)
     local rng = love.math.newRandomGenerator(seed)
 
-    local radius = 10 + rng:random() * 10
-    local hull_points = generateHull(rng, radius)
-    local base_color = randomColor(rng)
-    local detail_color = randomColor(rng)
+    -- Base ship dimensions
+    local length = 20 + rng:random() * 20        -- 20-40 units long
+    local width = 15 + rng:random() * 15         -- 15-30 units wide
+    local radius = math.max(length, width) * 0.5 -- Bounding radius for physics
+
+    -- Generate ship components
+    local hull_points = generateSpaceshipHull(rng, length, width)
+    local cockpit_points = generateCockpitDetail(rng, length, width)
+    local engines = generateEngines(rng, hull_points, length, width)
+    local weapon_hardpoints = generateWeaponHardpoints(rng, length, width)
+    local panel_lines = generatePanelLines(rng, length, width)
+
+    -- Color scheme
+    local color_schemes = { "warm", "cool", "neutral", "vibrant" }
+    local scheme = color_schemes[rng:random(1, #color_schemes)]
+
+    local base_color = randomColor(rng, scheme)
+    local detail_color = randomColor(rng, "neutral")
+    local accent_color = randomColor(rng, scheme)
+
+    -- Darken detail color a bit
+    detail_color[1] = detail_color[1] * 0.7
+    detail_color[2] = detail_color[2] * 0.7
+    detail_color[3] = detail_color[3] * 0.7
 
     -- Stats based on size/randomness
-    local mass = 1 + (radius / 10)
+    local mass = 1 + (radius / 15)
     local max_hull = 50 + rng:random(100)
     local max_shield = 20 + rng:random(80)
-    local speed_mult = 1.5 - (radius / 30) -- Smaller is faster
+    local speed_mult = 1.5 - (radius / 40) -- Smaller is faster
 
-    -- Find rear-most points for engine mounts
-    -- Simple heuristic: find vertices with lowest X (assuming ship points right, but hull generation is radial)
-    -- Actually, hull generation is radial around 0,0.
-    -- Let's assume engines are at the "back" relative to some direction?
-    -- Or just pick 1-2 random points on the perimeter?
-    -- Better: Pick points that are roughly opposite to the "front".
-    -- Let's assume "front" is +X (0 angle). "Back" is -X (pi angle).
-
+    -- Engine mounts for trail system (use actual engine positions)
     local engine_mounts = {}
-    local num_engines = rng:random(1, 2)
-
-    -- Find vertices closest to angle PI
-    local candidate_indices = {}
-    for i = 1, #hull_points, 2 do
-        local x = hull_points[i]
-        local y = hull_points[i + 1]
-        local angle = math.atan2(y, x)
-        -- Normalize angle to 0..2PI
-        if angle < 0 then angle = angle + math.pi * 2 end
-
-        -- Back is PI (3.14159)
-        local dist_to_back = math.abs(angle - math.pi)
-        table.insert(candidate_indices, { index = i, dist = dist_to_back, x = x, y = y })
-    end
-
-    table.sort(candidate_indices, function(a, b) return a.dist < b.dist end)
-
-    -- Pick top N candidates
-    for i = 1, math.min(num_engines, #candidate_indices) do
-        local cand = candidate_indices[i]
+    for _, eng in ipairs(engines) do
         table.insert(engine_mounts, {
-            x = cand.x,
-            y = cand.y,
-            width = radius * 0.4,
+            x = eng.x,
+            y = eng.y,
+            width = eng.radius * 2,
             length = 0.4 + rng:random() * 0.4,
-            color = { 0.2, 0.8 + rng:random() * 0.2, 1, 1 } -- Cyan/Blueish
+            color = eng.color
         })
     end
 
     return {
         name = "Unknown Ship",
-        type = "procedural", -- Marker for render system
+        type = "procedural",
 
         -- Physics
         mass = mass,
@@ -100,39 +380,96 @@ function ProceduralShip.generate(seed)
 
         engine_mounts = engine_mounts,
 
-        -- Render Data (stored for the generic draw function)
+        -- Render Data
         render_data = {
             hull = hull_points,
+            cockpit = cockpit_points,
+            engines = engines,
+            weapon_hardpoints = weapon_hardpoints,
+            panel_lines = panel_lines,
             base_color = base_color,
             detail_color = detail_color,
-            radius = radius
+            accent_color = accent_color,
+            radius = radius,
+            length = length,
+            width = width
         },
 
-        -- Custom draw function using the generated data
+        -- Enhanced draw function
         draw = function(color_override)
-            local r_data = hull_points -- Closure capture
-            local b_col = base_color
-            local d_col = detail_color
+            local r_data = {
+                hull = hull_points,
+                cockpit = cockpit_points,
+                engines = engines,
+                weapon_hardpoints = weapon_hardpoints,
+                panel_lines = panel_lines,
+                base_color = base_color,
+                detail_color = detail_color,
+                accent_color = accent_color
+            }
 
+            -- Draw main hull
             if color_override then
                 love.graphics.setColor(unpack(color_override))
             else
-                love.graphics.setColor(unpack(b_col))
+                love.graphics.setColor(unpack(r_data.base_color))
+            end
+            love.graphics.polygon("fill", r_data.hull)
+
+            -- Draw hull outline
+            love.graphics.setColor(0, 0, 0, 0.8)
+            love.graphics.setLineWidth(2)
+            love.graphics.polygon("line", r_data.hull)
+
+            -- Draw panel lines (surface details)
+            if not color_override then
+                love.graphics.setColor(r_data.detail_color[1], r_data.detail_color[2], r_data.detail_color[3], 0.4)
+                love.graphics.setLineWidth(1)
+                for _, line in ipairs(r_data.panel_lines) do
+                    love.graphics.line(line.x1, line.y1, line.x2, line.y2)
+                end
             end
 
-            love.graphics.polygon("fill", hull_points)
+            -- Draw cockpit detail
+            if not color_override then
+                love.graphics.setColor(r_data.accent_color[1], r_data.accent_color[2], r_data.accent_color[3], 0.6)
+                if #r_data.cockpit >= 6 then
+                    love.graphics.polygon("fill", r_data.cockpit)
+                end
 
-            love.graphics.setColor(0, 0, 0, 1)
-            love.graphics.setLineWidth(2)
-            love.graphics.polygon("line", hull_points)
+                -- Cockpit glass highlight
+                love.graphics.setColor(0.6, 0.8, 1, 0.3)
+                if #r_data.cockpit >= 6 then
+                    love.graphics.polygon("fill", r_data.cockpit)
+                end
+            end
+
+            -- Draw weapon hardpoints
+            if not color_override then
+                love.graphics.setColor(0.3, 0.3, 0.3, 0.8)
+                for _, wp in ipairs(r_data.weapon_hardpoints) do
+                    love.graphics.circle("fill", wp.x, wp.y, 1.5)
+                end
+            end
+
+            -- Draw engine glows
+            if not color_override then
+                for _, eng in ipairs(r_data.engines) do
+                    -- Outer engine glow
+                    love.graphics.setColor(eng.color[1], eng.color[2], eng.color[3], 0.3)
+                    love.graphics.circle("fill", eng.x, eng.y, eng.radius * 1.5)
+
+                    -- Inner engine core
+                    love.graphics.setColor(eng.color[1], eng.color[2], eng.color[3], 0.8)
+                    love.graphics.circle("fill", eng.x, eng.y, eng.radius * 0.8)
+
+                    -- Bright center
+                    love.graphics.setColor(1, 1, 1, 0.6)
+                    love.graphics.circle("fill", eng.x, eng.y, eng.radius * 0.3)
+                end
+            end
+
             love.graphics.setLineWidth(1)
-
-            -- Simple detail: inner polygon
-            love.graphics.setColor(unpack(d_col))
-            love.graphics.push()
-            love.graphics.scale(0.5)
-            love.graphics.polygon("fill", hull_points)
-            love.graphics.pop()
         end
     }
 end

@@ -1,6 +1,7 @@
 local Concord          = require "lib.concord.concord"
 local Config           = require "src.config"
 local ChunkTypes       = require "src.data.chunks"
+local DefaultSector    = require "src.data.default_sector"
 
 local Asteroids        = {}
 
@@ -174,7 +175,7 @@ function Asteroids.spawnField(world, sector_x, sector_y, seed, count)
         rng = math.random
     end
 
-    local half_size = (Config.SECTOR_SIZE or 10000) * 0.5
+    local half_size = (DefaultSector.SECTOR_SIZE or 10000) * 0.5
     local inner_radius = half_size * 0.1
     local outer_radius = half_size * 0.8
 

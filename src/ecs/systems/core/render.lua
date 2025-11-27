@@ -1,6 +1,7 @@
 local Concord = require "lib.concord.concord"
 local Config = require "src.config"
 local RenderStrategies = require "src.ecs.systems.core.render_strategies"
+local DefaultSector = require "src.data.default_sector"
 
 local nameFont
 local trailShader
@@ -56,12 +57,13 @@ function RenderSystem:draw()
         -- Draw visual boundaries of the CURRENT sector (Debug Visual)
         love.graphics.setColor(0.1, 0.1, 0.1, 1)
         love.graphics.setLineWidth(1)
-        love.graphics.rectangle("line", -Config.SECTOR_SIZE / 2, -Config.SECTOR_SIZE / 2, Config.SECTOR_SIZE,
-            Config.SECTOR_SIZE)
+        love.graphics.rectangle("line", -DefaultSector.SECTOR_SIZE / 2, -DefaultSector.SECTOR_SIZE / 2,
+            DefaultSector.SECTOR_SIZE,
+            DefaultSector.SECTOR_SIZE)
 
         -- Draw text at the sector boundary
         love.graphics.setColor(0.3, 0.3, 0.3, 1)
-        love.graphics.print("SECTOR EDGE >", Config.SECTOR_SIZE / 2 - 100, 0)
+        love.graphics.print("SECTOR EDGE >", DefaultSector.SECTOR_SIZE / 2 - 100, 0)
 
         for _, e in ipairs(self.drawPool) do
             local t = e.transform
@@ -86,8 +88,8 @@ function RenderSystem:draw()
                     -- The particle systems are updated in World Space (emitters moved to world pos).
                     -- So we should draw them at (0,0) relative to the sector offset.
 
-                    local sector_offset_x = diff_x * Config.SECTOR_SIZE
-                    local sector_offset_y = diff_y * Config.SECTOR_SIZE
+                    local sector_offset_x = diff_x * DefaultSector.SECTOR_SIZE
+                    local sector_offset_y = diff_y * DefaultSector.SECTOR_SIZE
 
                     love.graphics.push()
                     love.graphics.translate(sector_offset_x, sector_offset_y)
@@ -106,8 +108,8 @@ function RenderSystem:draw()
                 end
 
                 -- Calculate Relative Position to Camera's Sector
-                local relative_x = t.x + (diff_x * Config.SECTOR_SIZE)
-                local relative_y = t.y + (diff_y * Config.SECTOR_SIZE)
+                local relative_x = t.x + (diff_x * DefaultSector.SECTOR_SIZE)
+                local relative_y = t.y + (diff_y * DefaultSector.SECTOR_SIZE)
 
                 love.graphics.push()
                 love.graphics.translate(relative_x, relative_y)
@@ -157,6 +159,22 @@ function RenderSystem:draw()
                 -- Debug: Draw a small red dot at the center to ensure it's being drawn at all
                 -- love.graphics.setColor(1, 0, 0, 1)
                 -- love.graphics.circle("fill", 0, 0, 2)
+
+                if e.vehicle and not e.ai and e.name and e.name.value then
+                    local local_ship = world and world.local_ship
+                    if not local_ship or e ~= local_ship then
+                        local name = e.name.value
+                        local font = love.graphics.getFont()
+                        local text_w = font:getWidth(name)
+                        local text_h = font:getHeight()
+                        local radius = (r and r.radius) or 16
+
+                        love.graphics.rotate(-(t.r or 0))
+                        love.graphics.setColor(1, 1, 1, 0.9)
+                        love.graphics.print(name, -text_w / 2, -(radius + text_h + 4))
+                        love.graphics.rotate(t.r or 0)
+                    end
+                end
 
                 love.graphics.pop()
             end

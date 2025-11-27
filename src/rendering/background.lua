@@ -2,6 +2,7 @@ local Background = {}
 Background.__index = Background
 
 local Config = require "src.config"
+local DefaultSector = require "src.data.default_sector"
 
 local STAR_FIELD_RADIUS = 60000
 
@@ -86,9 +87,9 @@ function Background.new(enableNebula)
 
     -- New variety parameters
     self.nebulaParams.distortion = Config.BACKGROUND.NEBULA.DISTORTION_BASE +
-    math.random() * Config.BACKGROUND.NEBULA.DISTORTION_RANGE
+        math.random() * Config.BACKGROUND.NEBULA.DISTORTION_RANGE
     self.nebulaParams.densityScale = Config.BACKGROUND.NEBULA.DENSITY_BASE +
-    math.random() * Config.BACKGROUND.NEBULA.DENSITY_RANGE
+        math.random() * Config.BACKGROUND.NEBULA.DENSITY_RANGE
 
     self.nebulaParams.patches = {}
     local patchCount = 3
@@ -227,8 +228,8 @@ function Background:draw(cam_x, cam_y, cam_sector_x, cam_sector_y)
         self:generateStars(sw, sh)
     end
 
-    local abs_x = (cam_sector_x or 0) * Config.SECTOR_SIZE + (cam_x or 0)
-    local abs_y = (cam_sector_y or 0) * Config.SECTOR_SIZE + (cam_y or 0)
+    local abs_x = (cam_sector_x or 0) * DefaultSector.SECTOR_SIZE + (cam_x or 0)
+    local abs_y = (cam_sector_y or 0) * DefaultSector.SECTOR_SIZE + (cam_y or 0)
 
     local clear = Config.BACKGROUND.CLEAR_COLOR
     love.graphics.setColor(clear[1], clear[2], clear[3], clear[4])

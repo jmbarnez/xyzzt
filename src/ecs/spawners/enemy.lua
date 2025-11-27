@@ -57,6 +57,13 @@ function EnemySpawner.spawnEnemy(world, enemy_config, x, y, sectorX, sectorY)
         return nil
     end
 
+    local Server = nil
+    local assign_network_ids = false
+    if world.hosting then
+        Server = require "src.network.server"
+        assign_network_ids = true
+    end
+
     -- Spawn ship using procedural ship data
     local enemy_ship = ShipManager.spawn(world, enemy_config.ship_data, x, y, false)
 
@@ -104,6 +111,11 @@ function EnemySpawner.spawnEnemy(world, enemy_config, x, y, sectorX, sectorY)
 
     -- Add AI behavior tree
     enemy_ship:give("ai", enemy_config.behavior_tree)
+
+    if assign_network_ids and Server then
+        enemy_ship.network_id = Server.next_network_id
+        Server.next_network_id = Server.next_network_id + 1
+    end
 
     return enemy_ship
 end

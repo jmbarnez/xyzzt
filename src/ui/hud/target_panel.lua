@@ -1,28 +1,8 @@
 local Theme = require "src.ui.theme"
+local HealthBar = require "src.ui.hud.health_bar"
+local HealthModel = require "src.ui.hud.health_model"
 
 local TargetPanel = {}
-
--- Compact horizontal bar (with optional border)
-local function drawBar(x, y, width, height, current, max, colorFill, colorBg, showBorder)
-    local pct = 0
-    if max and max > 0 then
-        pct = math.max(0, math.min(1, (current or 0) / max))
-    end
-
-    love.graphics.setColor(colorBg)
-    love.graphics.rectangle("fill", x, y, width, height, 3, 3)
-
-    if pct > 0 then
-        love.graphics.setColor(colorFill)
-        love.graphics.rectangle("fill", x, y, width * pct, height, 3, 3)
-    end
-
-    if showBorder then
-        love.graphics.setColor(0, 0, 0, 0.85)
-        love.graphics.setLineWidth(1)
-        love.graphics.rectangle("line", x, y, width, height, 3, 3)
-    end
-end
 
 function TargetPanel.draw(world, player)
     if not (world and world.ui and world.ui.hover_target) then
@@ -75,19 +55,26 @@ function TargetPanel.draw(world, player)
     love.graphics.setColor(Theme.colors.textPrimary)
     love.graphics.print(nameText, cx, cy)
 
-    -- HP Bar
-    if target.hp and target.hp.max and target.hp.current then
-        local barY = cy + fontTitle:getHeight() + 6
-        local barHeight = 12
+    local bars = HealthModel.getBarsForEntity(target)
 
-        -- Using Hull colors from StatusPanel for consistency
-        local hpFill = { 0.95, 0.25, 0.25, 0.95 }
-        local hpBg = { 0.08, 0.05, 0.07, 0.9 }
+    local textHeight = fontTitle:getHeight()
+    local barHeight = 12
+    local barGap = 4
+    local barY = cy + textHeight + 6
 
-        drawBar(cx, barY, cw, barHeight, target.hp.current, target.hp.max, hpFill, hpBg, true)
-
-        -- Optional: Draw text overlay on bar? Or just keep it clean as requested "just ... hp bar"
-        -- User said "hp bar for all entities for now", implying visual.
+    for _, bar in ipairs(bars) do
+        HealthBar.draw(
+            cx,
+            barY,
+            cw,
+            barHeight,
+            bar.current or 0,
+            bar.max or 0,
+            bar.fill or { 1, 1, 1, 1 },
+            bar.bg or { 0, 0, 0, 0.8 },
+            true
+        )
+        barY = barY + barHeight + barGap
     end
 
     if world.debug_asteroid_overlay then

@@ -1,28 +1,8 @@
 local Theme = require "src.ui.theme"
+local HealthBar = require "src.ui.hud.health_bar"
+local HealthModel = require "src.ui.hud.health_model"
 
 local StatusPanel = {}
-
--- Compact horizontal bar (with optional border)
-local function drawBar(x, y, width, height, current, max, colorFill, colorBg, showBorder)
-    local pct = 0
-    if max and max > 0 then
-        pct = math.max(0, math.min(1, (current or 0) / max))
-    end
-
-    love.graphics.setColor(colorBg)
-    love.graphics.rectangle("fill", x, y, width, height, 3, 3)
-
-    if pct > 0 then
-        love.graphics.setColor(colorFill)
-        love.graphics.rectangle("fill", x, y, width * pct, height, 3, 3)
-    end
-
-    if showBorder then
-        love.graphics.setColor(0, 0, 0, 0.85)
-        love.graphics.setLineWidth(1)
-        love.graphics.rectangle("line", x, y, width, height, 3, 3)
-    end
-end
 
 -- Draw the status panel in the top-left, with level on the left and bars on the right
 function StatusPanel.draw(player)
@@ -121,64 +101,35 @@ function StatusPanel.draw(player)
     local barHeight = 12
     local barGap = 7
 
-    local topBarY = cy + 2
-    local bottomBarY = topBarY + barHeight + barGap
+    local bars = HealthModel.getBarsForEntity(ship or player)
 
-    local shieldCurrent = (ship and ship.shield and ship.shield.current) or 0
-    local shieldMax = (ship and ship.shield and ship.shield.max) or 0
-    local hullCurrent = (ship and ship.hull and ship.hull.current) or 0
-    local hullMax = (ship and ship.hull and ship.hull.max) or 0
-
-    -- SHIELD BAR (top)
-    local shieldFill = { 0.2, 0.95, 1.0, 0.95 }
-    local shieldBg = { 0.04, 0.08, 0.14, 0.9 }
-    drawBar(
-        rightX,
-        topBarY,
-        barWidth,
-        barHeight,
-        shieldCurrent,
-        shieldMax,
-        shieldFill,
-        shieldBg,
-        true
-    )
-
-    -- Slight neon inner line for shield if any
-    if shieldMax > 0 and shieldCurrent > 0 then
-        local pct = math.max(0, math.min(1, shieldCurrent / shieldMax))
-        love.graphics.setColor(0.5, 1.0, 1.0, 0.9)
-        love.graphics.setLineWidth(1)
-        local innerX = rightX + 2
-        local innerY = topBarY + barHeight - 3
-        local innerW = (barWidth - 4) * pct
-        love.graphics.line(innerX, innerY, innerX + innerW, innerY)
+    local barY = cy + 2
+    for i, bar in ipairs(bars) do
+        if i > 2 then break end
+        HealthBar.draw(
+            rightX,
+            barY,
+            barWidth,
+            barHeight,
+            bar.current or 0,
+            bar.max or 0,
+            bar.fill or { 1, 1, 1, 1 },
+            bar.bg or { 0, 0, 0, 0.8 },
+            true
+        )
+        barY = barY + barHeight + barGap
     end
 
-    -- HULL BAR (bottom)
-    local hullFill = { 0.95, 0.25, 0.25, 0.95 }
-    local hullBg = { 0.08, 0.05, 0.07, 0.9 }
-    drawBar(
-        rightX,
-        bottomBarY,
-        barWidth,
-        barHeight,
-        hullCurrent,
-        hullMax,
-        hullFill,
-        hullBg,
-        true
-    )
-
-    -- Divider ticks on bars
     local numDivisions = 8
     love.graphics.setColor(0, 0, 0, 0.6)
     love.graphics.setLineWidth(1)
     for i = 1, numDivisions - 1 do
         local t = i / numDivisions
         local tickX = rightX + barWidth * t
-        love.graphics.line(tickX, topBarY + 2, tickX, topBarY + barHeight - 2)
-        love.graphics.line(tickX, bottomBarY + 2, tickX, bottomBarY + barHeight - 2)
+        local firstBarY = cy + 2
+        love.graphics.line(tickX, firstBarY + 2, tickX, firstBarY + barHeight - 2)
+        local secondBarY = firstBarY + barHeight + barGap
+        love.graphics.line(tickX, secondBarY + 2, tickX, secondBarY + barHeight - 2)
     end
 
     love.graphics.setLineWidth(1)

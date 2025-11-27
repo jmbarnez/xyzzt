@@ -1,6 +1,7 @@
 -- src/systems/minimap.lua
 local Concord       = require "lib.concord.concord"
 local Config        = require "src.config"
+local DefaultSector = require "src.data.default_sector"
 
 local MinimapSystem = Concord.system({
     -- Entities to draw on the minimap
@@ -87,8 +88,8 @@ function MinimapSystem:draw()
                 local diff_sector_y = s.y - cam_sector_y
 
                 -- World difference including sectors
-                local world_diff_x = (t.x - cam_x) + (diff_sector_x * Config.SECTOR_SIZE)
-                local world_diff_y = (t.y - cam_y) + (diff_sector_y * Config.SECTOR_SIZE)
+                local world_diff_x = (t.x - cam_x) + (diff_sector_x * DefaultSector.SECTOR_SIZE)
+                local world_diff_y = (t.y - cam_y) + (diff_sector_y * DefaultSector.SECTOR_SIZE)
 
                 -- Map position
                 local draw_x = center_x + (world_diff_x * ZOOM_LEVEL)

@@ -13,9 +13,6 @@ return {
     RECONCILE_ASTEROID = 50,      -- Asteroids and chunks
     RECONCILE_PROJECTILE = 25,    -- Projectiles
 
-    -- Infinite Universe Config
-    SECTOR_SIZE = 2000, -- The width/height of one "Sector" before coordinates wrap
-
     -- Camera
     CAMERA_MIN_ZOOM = 0.5,
     CAMERA_MAX_ZOOM = 2.0,
