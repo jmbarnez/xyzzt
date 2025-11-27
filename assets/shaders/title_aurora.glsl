@@ -70,47 +70,58 @@ vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 pixel_coords) {
     float wisps      = smoothstep(0.3, 0.95, wispDetail * wispMask);
 
     // Combine motion + bands into intensity
-    float baseIntensity = band * 0.55 + warp * 0.30 + wisps * 0.40;
+    float baseIntensity = band * 0.35 + warp * 0.25 + wisps * 0.30;
 
     // Mild temporal pulsing
-    float slowPulse   = 0.14 * sin(t * 0.8 + 1.3) + 0.86;
-    float ripplePulse = 0.08 * sin(t * 2.5 + warp * 8.0) + 0.96;
+    float slowPulse   = 0.05 * sin(t * 0.8 + 1.3) + 0.95;
+    float ripplePulse = 0.03 * sin(t * 2.5 + warp * 8.0) + 0.97;
     float intensity   = clamp(baseIntensity * slowPulse * ripplePulse, 0.0, 1.0);
 
     // Add a faster-varying hue modulation so colors change more often
-    float hueMod = 0.5 + 0.5 * sin(t * 3.0 + uv.x * 4.0 + uv.y * 2.0);
+    float hueMod = 0.5 + 0.5 * sin(t * 1.5 + uv.x * 2.5 + uv.y * 1.5);
 
-    // Core palette: deep green -> bright teal, modulated by hueMod
-    vec3 baseColor      = vec3(0.02, 0.35, 0.20);
-    vec3 highlightColor = vec3(0.24, 0.95, 0.75);
-    vec3 altHighlight   = vec3(0.30, 0.90, 0.35);
-    vec3 dynamicHighlight = mix(highlightColor, altHighlight, hueMod);
-    vec3 aurora         = mix(baseColor, dynamicHighlight, intensity);
+    // Core palette: cool base with teal, blue, lavender and pink highlights
+    vec3 baseColor       = vec3(0.02, 0.18, 0.32);
+    vec3 tealHighlight   = vec3(0.18, 0.85, 0.80);
+    vec3 blueHighlight   = vec3(0.30, 0.65, 0.98);
+    vec3 lavenderHighlight = vec3(0.78, 0.62, 0.96);
+    vec3 pinkHighlight   = vec3(0.98, 0.55, 0.78);
+
+    float palettePhase   = fract(0.5 * hueMod + 0.5 * sin(t * 0.3 + uv.x * 0.4 + uv.y * 0.2));
+    float coolMixFactor  = smoothstep(0.0, 0.5, palettePhase);
+    float warmMixFactor  = smoothstep(0.3, 1.0, palettePhase);
+    vec3 coolMix         = mix(tealHighlight, blueHighlight, coolMixFactor);
+    vec3 warmMixColors   = mix(lavenderHighlight, pinkHighlight, warmMixFactor);
+    vec3 dynamicHighlight = mix(coolMix, warmMixColors, palettePhase);
+
+    vec3 aurora          = mix(baseColor, dynamicHighlight, intensity);
 
     // Purple / magenta accents near bright areas, with faster variation
-    float phaseShift   = t * 1.1 + uv.x * 2.4 + uv.y * 1.3;
+    float phaseShift   = t * 0.9 + uv.x * 1.8 + uv.y * 1.1;
     float colorLFO     = 0.5 + 0.5 * sin(phaseShift);
-    float purpleAmount = smoothstep(0.45, 1.0, intensity) * (0.22 + 0.48 * colorLFO);
-    vec3 purpleTint    = vec3(0.55, 0.28, 0.74);
+    float brightMask   = smoothstep(0.35, 0.9, intensity);
 
-    // Extra warm accent that alternates quickly with purple
-    float warmPhase    = t * 2.2 + warp * 5.0;
-    float warmMix      = 0.5 + 0.5 * sin(warmPhase);
-    vec3 warmTint      = vec3(0.90, 0.65, 0.25);
-    vec3 accentTint    = mix(purpleTint, warmTint, warmMix);
+    vec3 purpleTint    = vec3(0.65, 0.40, 0.95); // violet / purple
+    vec3 pinkTint      = vec3(0.98, 0.55, 0.78);
+    vec3 yellowTint    = vec3(1.00, 0.90, 0.45);
 
-    aurora = mix(aurora, accentTint, purpleAmount);
+    vec3 purplePink    = mix(purpleTint, pinkTint, colorLFO);
+    float yellowLFO    = 0.5 + 0.5 * sin(t * 0.6 + warp * 3.0);
+    vec3 accentTint    = mix(purplePink, yellowTint, 0.3 * yellowLFO);
+
+    float accentAmount = brightMask * 0.25;
+    aurora = mix(aurora, accentTint, accentAmount);
 
     // Subtle top–bottom gradient so the top is brighter
     float verticalFade = smoothstep(-0.5, 0.8, uv.y + warp * 0.15);
-    aurora *= mix(0.7, 1.3, verticalFade);
+    aurora *= mix(0.85, 1.15, verticalFade);
 
     // Final grading
     aurora = gradeAurora(aurora);
 
     // Preserve readability: modulate but do not completely darken
-    float baseBrightness  = 0.55;
-    float effectStrength  = 0.65;
+    float baseBrightness  = 0.75;
+    float effectStrength  = 0.40;
     vec3 litAurora        = mix(vec3(baseBrightness), aurora, effectStrength);
 
     return tex * vec4(litAurora, 1.0);
