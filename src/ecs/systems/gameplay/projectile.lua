@@ -17,42 +17,6 @@ function ProjectileSystem:update(dt)
     end
 end
 
-function ProjectileSystem:collision(entityA, entityB, contact)
-    local projectile_entity
-    local target
-
-    if entityA.projectile and not entityB.projectile then
-        projectile_entity = entityA
-        target = entityB
-    elseif entityB.projectile and not entityA.projectile then
-        projectile_entity = entityB
-        target = entityA
-    else
-        return
-    end
-
-    if not projectile_entity or not projectile_entity:getWorld() then
-        return
-    end
-
-    local projectile = projectile_entity.projectile
-    if not projectile or projectile.predicted then
-        return
-    end
-
-    if target == projectile.owner then
-        return
-    end
-
-    if not (target and (target.asteroid or target.asteroid_chunk)) then
-        return
-    end
-
-    EntityUtils.apply_damage(target, projectile.damage or 0)
-
-    projectile.hit_something = true
-end
-
 function ProjectileSystem:destroyProjectile(e)
     local world = self:getWorld()
     if not e or not e:getWorld() then return end -- Already destroyed

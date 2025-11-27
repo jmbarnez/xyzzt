@@ -24,14 +24,16 @@ function CollisionHandlers.handle_projectile_hit(projectile, target, world)
 
     local damage = proj_comp.damage or 0
 
-    -- Apply damage
-    if target.asteroid or target.asteroid_chunk then
+    if damage <= 0 then
         return
     end
 
+    -- Apply damage
     if target.vehicle and (target.hull or target.shield) then
+        -- Ships (players, enemies) with hull/shield
         EntityUtils.apply_ship_damage(target, damage)
     elseif target.hp then
+        -- Generic HP entities, including asteroids and chunks
         EntityUtils.apply_damage(target, damage)
     end
 end

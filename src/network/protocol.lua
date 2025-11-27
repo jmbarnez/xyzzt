@@ -290,6 +290,11 @@ function Protocol.createEntityState(entity)
                     state.color = entity.render.color
                 end
             end
+
+            -- Sync player display name if present on the entity
+            if entity.name and entity.name.value and entity.name.value ~= "" then
+                state.player_name = entity.name.value
+            end
         elseif state.type == "projectile" then
             state.radius = entity.render.radius
             state.color = entity.render.color

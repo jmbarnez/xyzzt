@@ -386,8 +386,16 @@ local function syncNetworkEntity(self, state, server_time)
     end
 
     entity = self.world.networked_entities[state.id]
-    if entity and entity.vehicle and not entity.ai and not entity.name then
-        assignPlayerName(self, entity, state.id)
+    if entity and entity.vehicle and not entity.ai then
+        if state.player_name and state.player_name ~= "" then
+            if entity.name then
+                entity.name.value = state.player_name
+            else
+                entity:give("name", state.player_name)
+            end
+        elseif not entity.name then
+            assignPlayerName(self, entity, state.id)
+        end
     end
 end
 
