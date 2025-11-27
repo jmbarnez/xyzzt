@@ -281,7 +281,7 @@ function PlayState:initSystems()
             move_right = { "key:d", "key:right" },
             move_up    = { "key:w", "key:up" },
             move_down  = { "key:s", "key:down" },
-            fire       = { "mouse:1" },
+            fire       = { "mouse:1", "key:space" },
             boost      = { "key:space" }
         }
     })

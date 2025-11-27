@@ -155,6 +155,9 @@ function RenderSystem:draw()
                                 local r = c[1] or 1
                                 local g = c[2] or 1
                                 local b = c[3] or 1
+                                if e.input and e.input.boost then
+                                    r, g, b = 0.8, 0.2, 1.0
+                                end
                                 shader:send("glow_tint", { r, g, b })
                             end
                             love.graphics.draw(trail.particle_system, 0, 0)

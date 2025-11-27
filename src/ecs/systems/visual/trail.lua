@@ -59,6 +59,18 @@ function TrailSystem:update(dt)
 
                 local ps = trail.particle_system
 
+                local color = trail.color or { 0, 1, 1, 1 }
+                local r = color[1] or 1
+                local g = color[2] or 1
+                local b = color[3] or 1
+                if e.input and e.input.boost then
+                    r, g, b = 0.8, 0.2, 1.0
+                end
+                ps:setColors(
+                    r, g, b, 1,
+                    r, g, b, 0
+                )
+
                 -- Calculate world position of this engine mount
                 local angle = transform.r
                 local cos_a = math.cos(angle)
