@@ -15,10 +15,10 @@ return {
     -- Enemy ship configuration
     enemy_ships = {
         enabled = true,
-        count = 8,                       -- Number of enemy ships per sector
+        count = 15,                       -- Number of enemy ships per sector
         ship_name = "starter_drone",     -- All enemies use this ship
         -- Spatial distribution parameters
-        min_distance_from_origin = 4000,  -- Don't spawn too close to player start
+        min_distance_from_origin = 2000,  -- Don't spawn too close to player start
         max_distance_from_origin = 7500, -- Stay within sector bounds
         min_separation = 50,             -- Minimum distance between enemy ships
     },

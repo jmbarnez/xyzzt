@@ -40,6 +40,10 @@ function PhysicsSystem:handleBeginContact(fixtureA, fixtureB, contact)
         return
     end
 
+    if entityA.projectile_shard or entityB.projectile_shard then
+        return
+    end
+
     world:emit("collision", entityA, entityB, contact)
 end
 

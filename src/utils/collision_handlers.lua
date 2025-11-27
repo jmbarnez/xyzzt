@@ -11,6 +11,10 @@ function CollisionHandlers.handle_projectile_hit(projectile, target, world)
     local proj_comp = projectile.projectile
     if not proj_comp then return end
 
+    if target.projectile or target.projectile_shard then
+        return
+    end
+
     -- Get damage
     -- Mark projectile as hit; ProjectileSystem will handle shatter + cleanup
     proj_comp.hit_something = true
