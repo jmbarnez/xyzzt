@@ -38,6 +38,7 @@ function InputSystem:update(dt)
 
                 input.turn       = 0
                 input.fire       = world.controls:down("fire")
+                input.boost      = world.controls:down("boost")
 
                 local ship       = e.controlling and e.controlling.entity or nil
                 if ship and ship.transform and ship.physics and ship.physics.body then

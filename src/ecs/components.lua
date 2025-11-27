@@ -27,6 +27,7 @@ Concord.component("input", function(c)
     c.move_x = 0
     c.move_y = 0
     c.target_angle = nil
+    c.boost = false
 end)
 
 Concord.component("render", function(c, arg)

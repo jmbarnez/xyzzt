@@ -28,6 +28,7 @@ function PlayerControlSystem:update(dt)
 
         -- Actions
         input.fire       = world.controls:down("fire")
+        input.boost      = world.controls:down("boost")
 
         -- Mouse Aiming
         if transform then

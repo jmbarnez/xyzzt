@@ -39,23 +39,30 @@ function MovementSystem:update(dt)
                 local nx = input.move_x / len
                 local ny = input.move_y / len
 
-                fx = nx * stats.thrust
-                fy = ny * stats.thrust
+                local thrust = stats.thrust
+                local max_speed = stats.max_speed
+                if input.boost then
+                    thrust = thrust * 1.8
+                    max_speed = max_speed * 1.5
+                end
+
+                fx = nx * thrust
+                fy = ny * thrust
+
+                -- Cap Max Speed with potential boost multiplier
+                local vx, vy = body:getLinearVelocity()
+                local speed_sq = vx * vx + vy * vy
+                if speed_sq > (max_speed * max_speed) then
+                    local speed = math.sqrt(speed_sq)
+                    local scale = max_speed / speed
+                    body:setLinearVelocity(vx * scale, vy * scale)
+                end
             end
         end
 
         -- Apply Force
         if fx ~= 0 or fy ~= 0 then
             body:applyForce(fx, fy)
-        end
-
-        -- 3. Cap Max Speed
-        local vx, vy = body:getLinearVelocity()
-        local speed_sq = vx * vx + vy * vy
-        if speed_sq > (stats.max_speed * stats.max_speed) then
-            local speed = math.sqrt(speed_sq)
-            local scale = stats.max_speed / speed
-            body:setLinearVelocity(vx * scale, vy * scale)
         end
 
         -- 4. Sync Transform
