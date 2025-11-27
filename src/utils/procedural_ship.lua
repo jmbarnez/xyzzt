@@ -34,98 +34,177 @@ end
 -- Generate a sleek spaceship hull with front point, wings, and rear
 local function generateSpaceshipHull(rng, length, width)
     -- Ship points forward (to the right, +X direction)
-    local points = {}
+    local archetype = rng:random(1, 3)
 
-    -- Front tip (nose)
-    local nose_x = length * 0.5
-    local nose_sharpness = 0.7 + rng:random() * 0.3 -- How pointy the nose is
+    -- Archetype 1: baseline fighter (original shape with slight variation)
+    if archetype == 1 then
+        local points = {}
 
-    -- Main body width variation
-    local body_width = width * (0.8 + rng:random() * 0.2)
-    local rear_width = body_width * (0.4 + rng:random() * 0.3)
+        -- Front tip (nose)
+        local nose_x = length * (0.45 + rng:random() * 0.15)
+        local nose_sharpness = 0.7 + rng:random() * 0.3 -- How pointy the nose is
 
-    -- Asymmetry factor (slightRandomVariation for organic feel)
-    local asym_top = 1.0 + (rng:random() - 0.5) * 0.1
-    local asym_bot = 1.0 + (rng:random() - 0.5) * 0.1
+        -- Main body width variation
+        local body_width = width * (0.8 + rng:random() * 0.2)
+        local rear_width = body_width * (0.4 + rng:random() * 0.3)
 
-    -- Define ship profile (clockwise from nose, top side first)
-    -- Nose tip
-    table.insert(points, nose_x)
-    table.insert(points, 0)
+        -- Asymmetry factor (slightRandomVariation for organic feel)
+        local asym_top = 1.0 + (rng:random() - 0.5) * 0.1
+        local asym_bot = 1.0 + (rng:random() - 0.5) * 0.1
 
-    -- Top side (going back from nose)
-    -- Upper cockpit area
-    local cockpit_x = length * (0.2 + rng:random() * 0.1)
-    local cockpit_y = -body_width * 0.3 * asym_top
-    table.insert(points, cockpit_x)
-    table.insert(points, cockpit_y)
+        -- Define ship profile (clockwise from nose, top side first)
+        -- Nose tip
+        table.insert(points, nose_x)
+        table.insert(points, 0)
 
-    -- Top wing leading edge
-    local wing_front_x = length * (0.05 + rng:random() * 0.1)
-    local wing_front_y = -body_width * (0.5 + rng:random() * 0.2) * asym_top
-    table.insert(points, wing_front_x)
-    table.insert(points, wing_front_y)
+        -- Top side (going back from nose)
+        -- Upper cockpit area
+        local cockpit_x = length * (0.2 + rng:random() * 0.1)
+        local cockpit_y = -body_width * 0.3 * asym_top
+        table.insert(points, cockpit_x)
+        table.insert(points, cockpit_y)
 
-    -- Top wing tip (widest point)
-    local wing_tip_x = -length * (0.15 + rng:random() * 0.1)
-    local wing_tip_y = -body_width * (0.55 + rng:random() * 0.15) * asym_top
-    table.insert(points, wing_tip_x)
-    table.insert(points, wing_tip_y)
+        -- Top wing leading edge
+        local wing_front_x = length * (0.05 + rng:random() * 0.1)
+        local wing_front_y = -body_width * (0.5 + rng:random() * 0.2) * asym_top
+        table.insert(points, wing_front_x)
+        table.insert(points, wing_front_y)
 
-    -- Top wing trailing edge (back to body)
-    local wing_back_x = -length * (0.3 + rng:random() * 0.1)
-    local wing_back_y = -rear_width * 0.5 * asym_top
-    table.insert(points, wing_back_x)
-    table.insert(points, wing_back_y)
+        -- Top wing tip (widest point)
+        local wing_tip_x = -length * (0.15 + rng:random() * 0.1)
+        local wing_tip_y = -body_width * (0.55 + rng:random() * 0.15) * asym_top
+        table.insert(points, wing_tip_x)
+        table.insert(points, wing_tip_y)
 
-    -- Rear top (engine mount area)
-    local rear_x = -length * 0.5
-    local rear_top_y = -rear_width * (0.4 + rng:random() * 0.1) * asym_top
-    table.insert(points, rear_x)
-    table.insert(points, rear_top_y)
+        -- Top wing trailing edge (back to body)
+        local wing_back_x = -length * (0.3 + rng:random() * 0.1)
+        local wing_back_y = -rear_width * 0.5 * asym_top
+        table.insert(points, wing_back_x)
+        table.insert(points, wing_back_y)
 
-    -- Rear center top (engine cutout)
-    table.insert(points, rear_x + length * 0.05)
-    table.insert(points, -rear_width * 0.15 * asym_top)
+        -- Rear top (engine mount area)
+        local rear_x = -length * 0.5
+        local rear_top_y = -rear_width * (0.4 + rng:random() * 0.1) * asym_top
+        table.insert(points, rear_x)
+        table.insert(points, rear_top_y)
 
-    -- Center rear (between engines)
-    table.insert(points, rear_x)
-    table.insert(points, 0)
+        -- Rear center top (engine cutout)
+        table.insert(points, rear_x + length * 0.05)
+        table.insert(points, -rear_width * 0.15 * asym_top)
 
-    -- Rear center bottom (engine cutout)
-    table.insert(points, rear_x + length * 0.05)
-    table.insert(points, rear_width * 0.15 * asym_bot)
+        -- Center rear (between engines)
+        table.insert(points, rear_x)
+        table.insert(points, 0)
 
-    -- Rear bottom (engine mount area)
-    table.insert(points, rear_x)
-    table.insert(points, rear_width * (0.4 + rng:random() * 0.1) * asym_bot)
+        -- Rear center bottom (engine cutout)
+        table.insert(points, rear_x + length * 0.05)
+        table.insert(points, rear_width * 0.15 * asym_bot)
 
-    -- Bottom wing trailing edge
-    local wing_back_x_bot = -length * (0.3 + rng:random() * 0.1)
-    local wing_back_y_bot = rear_width * 0.5 * asym_bot
-    table.insert(points, wing_back_x_bot)
-    table.insert(points, wing_back_y_bot)
+        -- Rear bottom (engine mount area)
+        table.insert(points, rear_x)
+        table.insert(points, rear_width * (0.4 + rng:random() * 0.1) * asym_bot)
 
-    -- Bottom wing tip
-    local wing_tip_x_bot = -length * (0.15 + rng:random() * 0.1)
-    local wing_tip_y_bot = body_width * (0.55 + rng:random() * 0.15) * asym_bot
-    table.insert(points, wing_tip_x_bot)
-    table.insert(points, wing_tip_y_bot)
+        -- Bottom wing trailing edge
+        local wing_back_x_bot = -length * (0.3 + rng:random() * 0.1)
+        local wing_back_y_bot = rear_width * 0.5 * asym_bot
+        table.insert(points, wing_back_x_bot)
+        table.insert(points, wing_back_y_bot)
 
-    -- Bottom wing leading edge
-    local wing_front_x_bot = length * (0.05 + rng:random() * 0.1)
-    local wing_front_y_bot = body_width * (0.5 + rng:random() * 0.2) * asym_bot
-    table.insert(points, wing_front_x_bot)
-    table.insert(points, wing_front_y_bot)
+        -- Bottom wing tip
+        local wing_tip_x_bot = -length * (0.15 + rng:random() * 0.1)
+        local wing_tip_y_bot = body_width * (0.55 + rng:random() * 0.15) * asym_bot
+        table.insert(points, wing_tip_x_bot)
+        table.insert(points, wing_tip_y_bot)
 
-    -- Bottom cockpit area
-    local cockpit_y_bot = body_width * 0.3 * asym_bot
-    table.insert(points, cockpit_x)
-    table.insert(points, cockpit_y_bot)
+        -- Bottom wing leading edge
+        local wing_front_x_bot = length * (0.05 + rng:random() * 0.1)
+        local wing_front_y_bot = body_width * (0.5 + rng:random() * 0.2) * asym_bot
+        table.insert(points, wing_front_x_bot)
+        table.insert(points, wing_front_y_bot)
 
-    -- Back to nose (loop complete)
+        -- Bottom cockpit area
+        local cockpit_y_bot = body_width * 0.3 * asym_bot
+        table.insert(points, cockpit_x)
+        table.insert(points, cockpit_y_bot)
 
-    return points
+        -- Back to nose (loop complete)
+
+        return points
+    end
+
+    -- Archetype 2: broad gunship with heavy rear
+    if archetype == 2 then
+        local points = {}
+
+        local body_width = width * (1.1 + rng:random() * 0.3)
+        local rear_width = body_width * (0.8 + rng:random() * 0.2)
+        local rear_x = -length * (0.35 + rng:random() * 0.1)
+        local nose_x = length * (0.25 + rng:random() * 0.15)
+
+        table.insert(points, nose_x)
+        table.insert(points, 0)
+
+        local mid_front_x = length * (0.05 + rng:random() * 0.05)
+        local mid_front_y = -body_width * (0.4 + rng:random() * 0.1)
+        table.insert(points, mid_front_x)
+        table.insert(points, mid_front_y)
+
+        local wing_tip_x = rear_x + length * (0.05 + rng:random() * 0.05)
+        local wing_tip_y = -rear_width * (0.8 + rng:random() * 0.1)
+        table.insert(points, wing_tip_x)
+        table.insert(points, wing_tip_y)
+
+        local rear_top_x = rear_x
+        local rear_top_y = -rear_width * (0.6 + rng:random() * 0.1)
+        table.insert(points, rear_top_x)
+        table.insert(points, rear_top_y)
+
+        local rear_center_x = rear_x - length * (0.05 + rng:random() * 0.05)
+        table.insert(points, rear_center_x)
+        table.insert(points, 0)
+
+        local rear_bottom_y = rear_width * (0.6 + rng:random() * 0.1)
+        table.insert(points, rear_top_x)
+        table.insert(points, rear_bottom_y)
+
+        local wing_tip_y_bot = rear_width * (0.8 + rng:random() * 0.1)
+        table.insert(points, wing_tip_x)
+        table.insert(points, wing_tip_y_bot)
+
+        local mid_front_y_bot = body_width * (0.4 + rng:random() * 0.1)
+        table.insert(points, mid_front_x)
+        table.insert(points, mid_front_y_bot)
+
+        return points
+    end
+
+    -- Archetype 3: long interceptor / spearhead
+    do
+        local points = {}
+
+        local body_width = width * (0.6 + rng:random() * 0.2)
+        local tail_width = body_width * (0.3 + rng:random() * 0.2)
+        local nose_x = length * (0.55 + rng:random() * 0.15)
+        local mid_x = length * (0.1 + rng:random() * 0.05)
+        local tail_x = -length * (0.6 + rng:random() * 0.1)
+
+        table.insert(points, nose_x)
+        table.insert(points, 0)
+
+        table.insert(points, mid_x)
+        table.insert(points, -body_width * (0.4 + rng:random() * 0.1))
+
+        table.insert(points, tail_x)
+        table.insert(points, -tail_width)
+
+        table.insert(points, tail_x)
+        table.insert(points, tail_width)
+
+        table.insert(points, mid_x)
+        table.insert(points, body_width * (0.4 + rng:random() * 0.1))
+
+        return points
+    end
 end
 
 -- Generate cockpit/detail overlay

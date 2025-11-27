@@ -52,7 +52,7 @@ function NewGameState:enter()
     end
 
     self.worldName = lastWorldName or "New World"
-    self.seedString = lastWorldSeed or generateRandomSeed()
+    self.seedString = generateRandomSeed()
     self.activeField = "name"
 
     self.buttons = {

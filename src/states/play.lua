@@ -19,6 +19,7 @@ local PlayerControlSystem         = require "src.ecs.systems.gameplay.player_con
 local MovementSystem              = require "src.ecs.systems.core.movement"
 local DeathSystem                 = require "src.ecs.systems.gameplay.death"
 local LootSystem                  = require "src.ecs.systems.gameplay.loot"
+local ShipDeathSystem             = require "src.ecs.systems.gameplay.ship_death"
 local CollisionSystem             = require "src.ecs.systems.core.collision"
 
 local MinimapSystem               = require "src.ecs.systems.visual.minimap"
@@ -129,6 +130,8 @@ function PlayState:enter(prev, param)
     self.world = Concord.world()
     self.world.background = Background.new()
     self.world.debug_asteroid_overlay = false
+    self.world.player_dead = false
+    self.world.player_death_time = nil
 
     -- Camera
     self.world.camera = Camera.new()
@@ -887,6 +890,7 @@ function PlayState:enter(prev, param)
         WeaponSystem,        -- 6. Fire weapons
         ProjectileSystem,    -- 7. Update projectiles
         DeathSystem,         -- 8. Handle HP <= 0
+        ShipDeathSystem,
         LootSystem,          -- 9. Spawn loot from dead entities
         AsteroidChunkSystem,
         ProjectileShardSystem,
@@ -968,7 +972,7 @@ function PlayState:update(dt)
     Client.update(dt)
 
     -- 2. Controls are disabled when chat is active
-    if Chat.isActive() then
+    if Chat.isActive() or (self.world and self.world.player_dead) then
         self.world.controlsEnabled = false
     else
         self.world.controlsEnabled = true
@@ -1082,12 +1086,52 @@ function PlayState:draw()
 
     -- Draw Chat Overlay
     Chat.draw()
+
+    if self.world and self.world.player_dead then
+        local sw, sh = love.graphics.getDimensions()
+        love.graphics.setColor(0, 0, 0, 0.7)
+        love.graphics.rectangle("fill", 0, 0, sw, sh)
+
+        love.graphics.setColor(1, 0.8, 0.8, 1)
+        local font = love.graphics.getFont()
+        local line_h = font:getHeight()
+        local center_y = sh * 0.4
+
+        love.graphics.printf("SHIP DESTROYED", 0, center_y, sw, "center")
+        love.graphics.printf("Press R to respawn or ESC to return to menu", 0, center_y + line_h + 10, sw, "center")
+    end
 end
 
 function PlayState:keypressed(key)
     -- 1. Check Chat First
     if Chat.keypressed(key) then
         return -- Chat consumed the input
+    end
+
+    if self.world and self.world.player_dead then
+        local Client = require "src.network.client"
+
+        if key == "escape" then
+            Gamestate.switch(require("src.states.menu"))
+            return
+        end
+
+        if key == "r" or key == "return" or key == "space" then
+            if not self.world.hosting and not Client.connected then
+                local spawn_x = 0
+                local spawn_y = 0
+                local ship_name = "starter_drone"
+
+                local ship = ShipSystem.spawn(self.world, ship_name, spawn_x, spawn_y, true)
+                if ship then
+                    self.world.local_ship = ship
+                    linkPlayerToShip(self.player, ship)
+                    self.world.player_dead = false
+                    self.world.player_death_time = nil
+                end
+            end
+            return
+        end
     end
 
     if key == "f1" then
