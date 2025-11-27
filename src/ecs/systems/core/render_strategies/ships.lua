@@ -119,25 +119,6 @@ function ShipsRender.procedural(e)
         end
     end
 
-    -- 5. Draw Engines
-    if data.engines then
-        for _, eng in ipairs(data.engines) do
-            local eng_color = eng.color or { 0, 1, 1, 1 }
-
-            -- Outer Glow
-            love.graphics.setColor(eng_color[1], eng_color[2], eng_color[3], 0.3)
-            love.graphics.circle("fill", eng.x, eng.y, eng.radius * 1.5)
-
-            -- Inner Core
-            love.graphics.setColor(eng_color[1], eng_color[2], eng_color[3], 0.8)
-            love.graphics.circle("fill", eng.x, eng.y, eng.radius * 0.8)
-
-            -- Bright Center
-            love.graphics.setColor(1, 1, 1, 0.6)
-            love.graphics.circle("fill", eng.x, eng.y, eng.radius * 0.3)
-        end
-    end
-
     love.graphics.setLineWidth(1)
 end
 

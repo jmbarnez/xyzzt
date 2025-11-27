@@ -25,6 +25,24 @@ function ProceduralEnemy.generate(seed, base_level)
     local ship_seed = seed + 12345
     local ship_data = ProceduralShip.generate(ship_seed)
 
+    if ship_data and ship_data.engine_mounts then
+        for _, mount in ipairs(ship_data.engine_mounts) do
+            local r = 1
+            local g = 0.2 + rng:random() * 0.25
+            local b = 0.15 + rng:random() * 0.2
+            mount.color = { r, g, b, 1 }
+        end
+    end
+
+    if ship_data and ship_data.render_data and ship_data.render_data.engines then
+        for _, eng in ipairs(ship_data.render_data.engines) do
+            local r = 1
+            local g = 0.25 + rng:random() * 0.3
+            local b = 0.1 + rng:random() * 0.2
+            eng.color = { r, g, b, 0.95 }
+        end
+    end
+
     -- Base stats
     local base_hp = ship_data.max_hull or 100
     local base_shield = ship_data.max_shield or 50

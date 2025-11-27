@@ -16,7 +16,7 @@ return {
         { x = 12, y = 0 },
     },
 
-    cargo_capacity = 50,
+    cargo_capacity = 500,
     magnet_radius = 100,
     magnet_force = 20,
 

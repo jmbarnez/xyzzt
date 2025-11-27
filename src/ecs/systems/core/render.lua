@@ -6,6 +6,19 @@ local DefaultSector = require "src.data.default_sector"
 local nameFont
 local trailShader
 
+local function ensureTrailShader()
+    if trailShader then
+        return trailShader
+    end
+
+    local shader_path = "assets/shaders/engine_trail.glsl"
+    if love.filesystem.getInfo(shader_path) then
+        trailShader = love.graphics.newShader(shader_path)
+    end
+
+    return trailShader
+end
+
 local RenderSystem = Concord.system({
     drawPool = { "transform", "render", "sector" },
     cameraPool = { "input", "controlling" }
@@ -129,10 +142,27 @@ function RenderSystem:draw()
                     -- Additive blending for glowing effect
                     love.graphics.setBlendMode("add")
 
+                    local shader = ensureTrailShader()
+                    if shader then
+                        love.graphics.setShader(shader)
+                    end
+
                     for _, trail in ipairs(e.trail.trails) do
                         if trail.particle_system then
+                            if shader then
+                                shader:send("time", love.timer.getTime())
+                                local c = trail.color or { 0, 1, 1, 1 }
+                                local r = c[1] or 1
+                                local g = c[2] or 1
+                                local b = c[3] or 1
+                                shader:send("glow_tint", { r, g, b })
+                            end
                             love.graphics.draw(trail.particle_system, 0, 0)
                         end
+                    end
+
+                    if shader then
+                        love.graphics.setShader()
                     end
 
                     love.graphics.setBlendMode("alpha")
