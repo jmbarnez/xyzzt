@@ -109,7 +109,7 @@ vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 pixel_coords) {
     float yellowLFO    = 0.5 + 0.5 * sin(t * 0.6 + warp * 3.0);
     vec3 accentTint    = mix(purplePink, yellowTint, 0.3 * yellowLFO);
 
-    float accentAmount = brightMask * 0.25;
+    float accentAmount = brightMask * 0.33;
     aurora = mix(aurora, accentTint, accentAmount);
 
     // Subtle top–bottom gradient so the top is brighter
@@ -120,8 +120,8 @@ vec4 effect(vec4 color, Image texture, vec2 texture_coords, vec2 pixel_coords) {
     aurora = gradeAurora(aurora);
 
     // Preserve readability: modulate but do not completely darken
-    float baseBrightness  = 0.75;
-    float effectStrength  = 0.40;
+    float baseBrightness  = 0.72;
+    float effectStrength  = 0.55;
     vec3 litAurora        = mix(vec3(baseBrightness), aurora, effectStrength);
 
     return tex * vec4(litAurora, 1.0);
