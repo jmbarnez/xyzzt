@@ -168,6 +168,7 @@ function Server.onClientConnect(peer)
         -- Track player (display_name filled in once we receive PLAYER_INFO)
         Server.players[player_id] = {
             entity = ship,
+            entity_id = ship.network_id,
             inputs = { move_x = 0, move_y = 0, fire = false },
             display_name = nil,
         }
@@ -218,6 +219,55 @@ function Server.onClientConnect(peer)
 
     if Server.onPlayerJoined then
         Server.onPlayerJoined(player_id, player_count)
+    end
+end
+
+function Server.respawnPlayer(player_id)
+    if not Server.world then return end
+
+    local player = Server.players[player_id]
+    if not player then return end
+
+    -- Don't respawn if they already have a ship that isn't destroyed
+    if player.entity and player.entity:isValid() then
+        return
+    end
+
+    local ShipSystem = require "src.ecs.spawners.ship"
+    local ship = ShipSystem.spawn(Server.world, "starter_drone", 0, 0, false)
+
+    if ship then
+        ship.network_id = Server.next_network_id
+        Server.next_network_id = Server.next_network_id + 1
+
+        player.entity = ship
+        player.entity_id = ship.network_id
+
+        if ship.render then
+            ship.render.color = { 1, 0.5, 0.2 }
+        end
+
+        if player.display_name then
+            if ship.name then
+                ship.name.value = player.display_name
+            else
+                ship:give("name", player.display_name)
+            end
+        end
+
+        local client = nil
+        for _, c in pairs(Server.clients) do
+            if c.player_id == player_id then
+                client = c
+                break
+            end
+        end
+
+        if client then
+            local respawn_packet = Protocol.createPlayerRespawnedPacket(ship.network_id)
+            local data = Protocol.serialize(respawn_packet)
+            client.peer:send(data, 0, "reliable")
+        end
     end
 end
 
@@ -317,6 +367,8 @@ function Server.onClientReceive(peer, data)
         local pong = Protocol.createPongPacket(client_time, love.timer.getTime())
         local data = Protocol.serialize(pong)
         peer:send(data, 0, "unreliable")
+    elseif packet.type == Protocol.PacketType.REQUEST_RESPAWN then
+        Server.respawnPlayer(client.player_id)
     end
 end
 

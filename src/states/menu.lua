@@ -475,6 +475,13 @@ function MenuState:keypressed(key)
         return
     end
 
+    if self.editing_display_name then
+        if key == "backspace" then
+            self.display_name_input = string.sub(self.display_name_input, 1, -2)
+            Config.PLAYER_NAME = self.display_name_input
+        end
+    end
+
     if key == 'escape' then
         love.event.quit()
         return

@@ -430,6 +430,7 @@ function PlayNetwork.initNetwork(self, is_joining, join_host)
     Client.setPlayerLeftCallback(function(...) PlayNetwork.handlePlayerLeft(self, ...) end)
     Client.setWelcomeCallback(function(...) PlayNetwork.handleWelcome(self, ...) end)
     Client.setPlayerInfoCallback(function(...) PlayNetwork.handlePlayerInfo(self, ...) end)
+    Client.setPlayerRespawnedCallback(function(...) PlayNetwork.handlePlayerRespawned(self, ...) end)
 
     if is_joining then
         Client.server_address = join_host
@@ -437,6 +438,18 @@ function PlayNetwork.initNetwork(self, is_joining, join_host)
     else
         Client.server_address = "localhost"
     end
+end
+
+function PlayNetwork.handlePlayerRespawned(self, new_entity_id)
+    self.my_entity_id = new_entity_id
+    self.world.player_dead = false
+    self.world.player_death_time = nil
+
+    -- The old ship is already gone from the world (the server took care of it).
+    -- We set local_ship to nil so we stop trying to control it.
+    -- The new ship will be created by the world state update, and because
+    -- is_me will be true, it will be assigned to local_ship.
+    self.world.local_ship = nil
 end
 
 function PlayNetwork.handleWorldState(self, packet)
@@ -559,6 +572,21 @@ function PlayNetwork.startHosting(self)
                 Server.next_network_id = Server.next_network_id + 1
             end
         end
+
+        self.world:subscribe("entity_died", function(_, entity)
+            if not entity.network_id then return end
+
+            local Server = require "src.network.server"
+            for _, p in pairs(Server.players) do
+                if p.entity_id and p.entity_id == entity.network_id then
+                    p.entity_id = nil -- Player no longer controls a ship
+                    p.entity = nil
+                    break
+                end
+            end
+
+            entity:destroy()
+        end)
     end
 end
 

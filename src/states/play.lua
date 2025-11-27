@@ -386,13 +386,22 @@ function PlayState:updateHover()
 end
 
 function PlayState:respawnLocalPlayer()
-    if not self.world.hosting and not Client.connected then
+    if Client.connected and not self.world.hosting then -- Pure client
+        Client.requestRespawn()
+    else -- Single-player or host
         local ship = ShipSystem.spawn(self.world, "starter_drone", 0, 0, true)
         if ship then
             self.world.local_ship = ship
             linkPlayerToShip(self.player, ship)
             self.world.player_dead = false
             self.world.player_death_time = nil
+
+            if self.world.hosting then
+                -- Assign a new network ID so it gets synced
+                local Server = require "src.network.server"
+                ship.network_id = Server.next_network_id
+                Server.next_network_id = Server.next_network_id + 1
+            end
         end
     end
 end

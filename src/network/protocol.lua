@@ -18,6 +18,7 @@ Protocol.PacketType = {
     PING = 2,
     CHAT = 3, -- New: Chat message
     PLAYER_INFO = 4, -- Client display name / metadata
+    REQUEST_RESPAWN = 5, -- Player is requesting to respawn
 
     -- Server -> Client
     WORLD_STATE = 10,
@@ -26,6 +27,7 @@ Protocol.PacketType = {
     PONG = 13,
     WELCOME = 14,
     CHAT_BROADCAST = 15, -- New: Server broadcasting chat
+    PLAYER_RESPAWNED = 16, -- Server confirms respawn and provides new ship ID
 }
 
 -- Packet Constructors
@@ -63,6 +65,23 @@ function Protocol.createChatBroadcastPacket(player_id, message)
         type = Protocol.PacketType.CHAT_BROADCAST,
         player_id = player_id,
         message = message
+    }
+end
+
+--- Create a REQUEST_RESPAWN packet (Client -> Server)
+function Protocol.createRequestRespawnPacket()
+    return {
+        type = Protocol.PacketType.REQUEST_RESPAWN
+    }
+end
+
+--- Create a PLAYER_RESPAWNED packet (Server -> Client)
+--- @param new_entity_id number The network ID of the new ship
+--- @return table packet
+function Protocol.createPlayerRespawnedPacket(new_entity_id)
+    return {
+        type = Protocol.PacketType.PLAYER_RESPAWNED,
+        entity_id = new_entity_id,
     }
 end
 

@@ -27,6 +27,7 @@ local Client = {
     onWelcome = nil,
     onChatBroadcast = nil,
     onPlayerInfo = nil,
+    onPlayerRespawned = nil,
 
     -- Game metadata
     display_name = nil,
@@ -155,6 +156,10 @@ function Client.onReceive(peer, data)
         else
             Client.ping = rtt
         end
+    elseif packet.type == Protocol.PacketType.PLAYER_RESPAWNED then
+        if Client.onPlayerRespawned then
+            Client.onPlayerRespawned(packet.entity_id)
+        end
     end
 end
 
@@ -210,6 +215,16 @@ function Client.sendChatMessage(message)
     Client.peer:send(data, 0, "reliable") -- Channel 0, reliable delivery
 end
 
+function Client.requestRespawn()
+    if not Client.connected or not Client.peer then
+        return
+    end
+
+    local packet = Protocol.createRequestRespawnPacket()
+    local data = Protocol.serialize(packet)
+    Client.peer:send(data, 0, "reliable")
+end
+
 function Client.disconnect()
     if Client.peer then
         Client.peer:disconnect()
@@ -251,6 +266,10 @@ end
 
 function Client.setPlayerInfoCallback(fn)
     Client.onPlayerInfo = fn
+end
+
+function Client.setPlayerRespawnedCallback(fn)
+    Client.onPlayerRespawned = fn
 end
 
 return Client
