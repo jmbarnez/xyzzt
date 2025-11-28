@@ -1,19 +1,20 @@
-local Gamestate   = require "lib.hump.gamestate"
-local baton       = require "lib.baton"
-local Camera      = require "lib.hump.camera"
-local Concord     = require "lib.concord.concord"
-local Config      = require "src.config"
-local Background  = require "src.rendering.background"
-local HUD         = require "src.ui.hud.hud"
-local Chat        = require "src.ui.hud.chat"
-local PauseMenu   = require "src.ui.pause_menu"
-local Theme       = require "src.ui.theme"
-local SaveManager = require "src.managers.save_manager"
-local Window      = require "src.ui.hud.window"
-local CargoPanel  = require "src.ui.hud.cargo_panel"
-local Client      = require "src.network.client"
-local Protocol    = require "src.network.protocol"
-local PlayNetwork = require "src.states.play_network"
+local Gamestate     = require "lib.hump.gamestate"
+local baton         = require "lib.baton"
+local Camera        = require "lib.hump.camera"
+local Concord       = require "lib.concord.concord"
+local Config        = require "src.config"
+local Background    = require "src.rendering.background"
+local HUD           = require "src.ui.hud.hud"
+local Chat          = require "src.ui.hud.chat"
+local PauseMenu     = require "src.ui.pause_menu"
+local Theme         = require "src.ui.theme"
+local SaveManager   = require "src.managers.save_manager"
+local Window        = require "src.ui.hud.window"
+local CargoPanel    = require "src.ui.hud.cargo_panel"
+local Client        = require "src.network.client"
+local Protocol      = require "src.network.protocol"
+local PlayNetwork   = require "src.states.play_network"
+local SectorManager = require "src.managers.sector_manager"
 
 require "src.ecs.components"
 
@@ -139,6 +140,8 @@ function PlayState:update(dt)
         self.world.background:update(dt)
     end
     
+    self:updatePlayerCenters()
+    SectorManager.update_streaming(self.world, dt)
     self.world:emit("update", dt)
 
     -- 4. Network Interpolation (Client Only)
@@ -283,7 +286,7 @@ end
 
 function PlayState:initWorld()
     self.world = Concord.world()
-    self.world.background = Background.new()
+    self.world.background = Background.new(Config.BACKGROUND.ENABLE_NEBULA ~= false)
     self.world.debug_asteroid_overlay = false
     self.world.player_dead = false
     self.world.player_death_time = nil
@@ -359,12 +362,7 @@ function PlayState:spawnInitialEntities(is_joining, snapshot)
 
         StationManager.spawn(self.world, "starter_station", 500, 500)
         
-        if DefaultSector.asteroids.enabled then
-            Asteroids.spawnField(self.world, player_sector_x, player_sector_y, seed, DefaultSector.asteroids.count)
-        end
-        if DefaultSector.enemy_ships.enabled then
-            EnemySpawner.spawnField(self.world, player_sector_x, player_sector_y, seed, DefaultSector.enemy_ships.count, DefaultSector.enemy_ships)
-        end
+        SectorManager.ensure_sector_loaded(self.world, player_sector_x, player_sector_y)
     else
         print("PlayState: Joining game, waiting for server spawn...")
     end
@@ -403,6 +401,38 @@ end
 
 function PlayState:sendClientInput()
     PlayNetwork.sendClientInput(self)
+end
+
+function PlayState:updatePlayerCenters()
+    if not self.world then return end
+
+    local centers = {}
+
+    local local_ship = self.world.local_ship
+    if local_ship and local_ship.transform and local_ship.sector then
+        centers[#centers + 1] = {
+            x = local_ship.transform.x,
+            y = local_ship.transform.y,
+            sx = local_ship.sector.x or 0,
+            sy = local_ship.sector.y or 0,
+        }
+    end
+
+    if self.player_entity_ids and self.world.networked_entities then
+        for _, entity_id in pairs(self.player_entity_ids) do
+            local e = self.world.networked_entities[entity_id]
+            if e and e.transform and e.sector then
+                centers[#centers + 1] = {
+                    x = e.transform.x,
+                    y = e.transform.y,
+                    sx = e.sector.x or 0,
+                    sy = e.sector.y or 0,
+                }
+            end
+        end
+    end
+
+    self.world.player_centers = centers
 end
 
 function PlayState:updateHover(dt)

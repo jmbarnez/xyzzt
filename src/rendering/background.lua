@@ -27,6 +27,10 @@ function Background.new(enableNebula)
 
     self.time = 0
 
+    if enableNebula == nil then
+        enableNebula = Config.BACKGROUND.ENABLE_NEBULA ~= false
+    end
+
     if enableNebula == false then
         self.nebulaShader = nil
     else
@@ -241,68 +245,45 @@ function Background:draw(cam_x, cam_y, cam_sector_x, cam_sector_y)
     love.graphics.setColor(clear[1], clear[2], clear[3], clear[4])
     love.graphics.rectangle("fill", 0, 0, sw, sh)
 
-    if self.nebulaShader and self.nebulaParams then
-        if not self._nebulaCanvas or self._nebulaCanvasWidth ~= sw or self._nebulaCanvasHeight ~= sh then
-            self._nebulaCanvas = love.graphics.newCanvas(sw, sh)
-            self._nebulaCanvasWidth = sw
-            self._nebulaCanvasHeight = sh
-            self._nebulaDirty = true
-        end
-
-        if self._nebulaDirty then
-            local previousCanvas = love.graphics.getCanvas()
-            love.graphics.setCanvas(self._nebulaCanvas)
-            love.graphics.clear(0, 0, 0, 0)
-
-            love.graphics.setShader(self.nebulaShader)
-            love.graphics.setColor(1, 1, 1, 1)
-
-            local baseOffset = self.nebulaParams.offsetBase or { 0, 0 }
-            local parallax = self.nebulaParams.parallax or 0.05
-            local offset_x = baseOffset[1] + abs_x * parallax
-            local offset_y = baseOffset[2] + abs_y * parallax
-
-            self.nebulaShader:send("time", self.time or 0)
-            self.nebulaShader:send("offset", { offset_x, offset_y })
-            self.nebulaShader:send("resolution", { sw, sh })
-            self.nebulaShader:send("noiseScale", self.nebulaParams.noiseScale)
-            self.nebulaShader:send("flow", self.nebulaParams.flow)
-            self.nebulaShader:send("alphaScale", self.nebulaParams.alphaScale)
-            self.nebulaShader:send("colorA", self.nebulaParams.colorA)
-            self.nebulaShader:send("colorB", self.nebulaParams.colorB)
-            self.nebulaShader:send("distortion", self.nebulaParams.distortion or 0.2)
-            self.nebulaShader:send("densityScale", self.nebulaParams.densityScale or 1.0)
-
-            local patches = self.nebulaParams.patches or {
-                {
-                    centerOffset = { 0, 0 },
-                    coverage = 0.6,
-                    colorVariation = 0.8
-                }
-            }
-
-            for _, patch in ipairs(patches) do
-                local centerOffset = patch.centerOffset or { 0, 0 }
-                local coverage = patch.coverage or 0.6
-                local colorVariation = patch.colorVariation or 0.8
-
-                self.nebulaShader:send("centerOffset", centerOffset)
-                self.nebulaShader:send("coverage", coverage)
-                self.nebulaShader:send("colorVariation", colorVariation)
-
-                love.graphics.rectangle("fill", 0, 0, sw, sh)
-            end
-
-            love.graphics.setShader()
-            love.graphics.setCanvas(previousCanvas)
-
-            self._nebulaDirty = false
-        end
-
+    if self.nebulaShader and self.nebulaParams and Config.BACKGROUND.ENABLE_NEBULA ~= false then
+        love.graphics.setShader(self.nebulaShader)
         love.graphics.setColor(1, 1, 1, 1)
-        if self._nebulaCanvas then
-            love.graphics.draw(self._nebulaCanvas, 0, 0)
+
+        local baseOffset = self.nebulaParams.offsetBase or { 0, 0 }
+        local parallax = self.nebulaParams.parallax or 0.05
+        local offset_x = baseOffset[1] + abs_x * parallax
+        local offset_y = baseOffset[2] + abs_y * parallax
+
+        self.nebulaShader:send("time", self.time or 0)
+        self.nebulaShader:send("offset", { offset_x, offset_y })
+        self.nebulaShader:send("resolution", { sw, sh })
+        self.nebulaShader:send("flow", self.nebulaParams.flow)
+        self.nebulaShader:send("alphaScale", self.nebulaParams.alphaScale)
+        self.nebulaShader:send("colorA", self.nebulaParams.colorA)
+        self.nebulaShader:send("colorB", self.nebulaParams.colorB)
+        self.nebulaShader:send("densityScale", self.nebulaParams.densityScale or 1.0)
+
+        local patches = self.nebulaParams.patches or {
+            {
+                centerOffset = { 0, 0 },
+                coverage = 0.6,
+                colorVariation = 0.8
+            }
+        }
+
+        for _, patch in ipairs(patches) do
+            local centerOffset = patch.centerOffset or { 0, 0 }
+            local coverage = patch.coverage or 0.6
+            local colorVariation = patch.colorVariation or 0.8
+
+            self.nebulaShader:send("centerOffset", centerOffset)
+            self.nebulaShader:send("coverage", coverage)
+            self.nebulaShader:send("colorVariation", colorVariation)
+
+            love.graphics.rectangle("fill", 0, 0, sw, sh)
         end
+
+        love.graphics.setShader()
     end
 
     self.starBatch:clear()

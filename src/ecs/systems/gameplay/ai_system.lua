@@ -2,6 +2,7 @@
 -- Processes behavior trees for AI-controlled entities
 
 local Concord = require "lib.concord.concord"
+local DefaultSector = require "src.data.default_sector"
 
 local AISystem = Concord.system({
     pool = { "ai", "transform" }
@@ -18,8 +19,35 @@ function AISystem:update(dt)
         return
     end
 
+    local centers = world and world.player_centers or nil
+    local has_centers = centers and #centers > 0
+    local max_sector_diff = 0
+
     for _, entity in ipairs(self.pool) do
         local ai = entity.ai
+
+        local relevant = true
+        if has_centers and entity.sector then
+            relevant = false
+            local esx = entity.sector.x or 0
+            local esy = entity.sector.y or 0
+
+            for _, center in ipairs(centers) do
+                local csx = center.sx or 0
+                local csy = center.sy or 0
+                local diff_sx = esx - csx
+                local diff_sy = esy - csy
+
+                if math.abs(diff_sx) <= max_sector_diff and math.abs(diff_sy) <= max_sector_diff then
+                    relevant = true
+                    break
+                end
+            end
+        end
+
+        if not relevant then
+            goto continue_ai
+        end
 
         -- Update timer
         ai.time_since_update = (ai.time_since_update or 0) + dt
@@ -42,6 +70,8 @@ function AISystem:update(dt)
                 ai.last_status = status
             end
         end
+
+        ::continue_ai::
     end
 end
 

@@ -26,6 +26,7 @@ return {
         STAR_SPRITE_BATCH_SIZE = 500,
         STAR_COUNT = 250,
         CLEAR_COLOR = { 0, 0, 0, 1 },
+        ENABLE_NEBULA = true,
 
         STAR_COLORS = {
             { 0.6,  0.7,  1.0 },
