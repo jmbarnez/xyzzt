@@ -6,6 +6,8 @@ local Config      = require "src.config"
 local Background  = require "src.rendering.background"
 local HUD         = require "src.ui.hud.hud"
 local Chat        = require "src.ui.hud.chat"
+local PauseMenu   = require "src.ui.pause_menu"
+local Theme       = require "src.ui.theme"
 local SaveManager = require "src.managers.save_manager"
 local Window      = require "src.ui.hud.window"
 local CargoPanel  = require "src.ui.hud.cargo_panel"
@@ -111,6 +113,8 @@ function PlayState:enter(prev, param)
     local is_joining = loadParams and loadParams.mode == "join"
     local join_host = loadParams and loadParams.host or "localhost"
 
+    self.isPaused = false
+
     self:initWorld()
     self:initUI()
     self:initNetwork(is_joining, join_host)
@@ -125,6 +129,10 @@ function PlayState:update(dt)
 
     -- 2. Input Management
     self:updateControls()
+
+    if self.isPaused then
+        return
+    end
 
     -- 3. World & Physics Updates
     if self.world.background then
@@ -145,13 +153,18 @@ function PlayState:update(dt)
 end
 
 function PlayState:draw()
-    love.graphics.setBackgroundColor(0.03, 0.05, 0.16)
+    local bg = Theme.getBackgroundColor()
+    love.graphics.setBackgroundColor(bg[1], bg[2], bg[3], bg[4] or 1)
     
     self.world:emit("draw")
 
     love.graphics.origin()
     HUD.draw(self.world, self.player)
     Chat.draw()
+ 
+    if self.isPaused then
+        PauseMenu.draw()
+    end
 
     self:drawDeathOverlay()
 end
@@ -159,10 +172,12 @@ end
 function PlayState:drawDeathOverlay()
     if self.world and self.world.player_dead then
         local sw, sh = love.graphics.getDimensions()
-        love.graphics.setColor(0, 0, 0, 0.7)
+        local dim = Theme.colors.overlay.screenDim
+        love.graphics.setColor(dim[1], dim[2], dim[3], dim[4] or 1)
         love.graphics.rectangle("fill", 0, 0, sw, sh)
 
-        love.graphics.setColor(1, 0.8, 0.8, 1)
+        local textColor = Theme.colors.textPrimary
+        love.graphics.setColor(textColor[1], textColor[2], textColor[3], textColor[4] or 1)
         local font = love.graphics.getFont()
         local line_h = font:getHeight()
         local center_y = sh * 0.4
@@ -182,9 +197,21 @@ function PlayState:keypressed(key)
     if self.world and self.world.player_dead then
         if key == "escape" then
             Gamestate.switch(require("src.states.menu"))
-        elseif key == "r" then
+        elseif key == "r" or key == "return" or key == "space" then
             self:respawnLocalPlayer()
         end
+        return
+    end
+
+    if self.isPaused then
+        if key == "escape" then
+            self.isPaused = false
+        end
+        return
+    end
+
+    if key == "escape" then
+        self.isPaused = true
         return
     end
 
@@ -217,12 +244,26 @@ function PlayState:textinput(t)
 end
 
 function PlayState:mousepressed(x, y, button)
+    if self.isPaused then
+        local action = PauseMenu.mousepressed(x, y, button)
+        if action == "resume" then
+            self.isPaused = false
+        elseif action == "menu" then
+            Gamestate.switch(require("src.states.menu"))
+        end
+        return
+    end
+
     if button == 1 then
         CargoPanel.mousepressed(x, y, button, self.world)
     end
 end
 
 function PlayState:mousereleased(x, y, button)
+    if self.isPaused then
+        return
+    end
+
     if button == 1 then
         CargoPanel.mousereleased(x, y, button, self.world)
     end
@@ -342,6 +383,13 @@ function PlayState:updateNetwork(dt)
 end
 
 function PlayState:updateControls()
+    if self.isPaused then
+        if self.world then
+            self.world.controlsEnabled = false
+        end
+        return
+    end
+
     if Chat.isActive() or (self.world and self.world.player_dead) then
         self.world.controlsEnabled = false
     else

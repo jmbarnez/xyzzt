@@ -15,24 +15,29 @@ function TargetPanel.draw(world, player)
     end
 
     local sw, sh = love.graphics.getDimensions()
-    local panelWidth = 260
-    local panelHeight = 64 -- Slightly taller to accommodate bar comfortably
+    local spacing = Theme.spacing
+    local shapes = Theme.shapes
+    local panelWidth = spacing.targetPanelWidth or 260
+    local panelHeight = spacing.targetPanelHeight or 64 -- Slightly taller to accommodate bar comfortably
     local panelX = (sw - panelWidth) / 2
-    local panelY = 16
+    local panelY = spacing.targetPanelOffsetY or 16
 
     local bg = Theme.getBackgroundColor()
+    local shadowOffsetX = shapes.shadowOffsetX or 3
+    local shadowOffsetY = shapes.shadowOffsetY or 4
+    local cornerRadius = shapes.targetPanelCornerRadius or 6
     love.graphics.setColor(0, 0, 0, 0.45)
-    love.graphics.rectangle("fill", panelX + 3, panelY + 4, panelWidth, panelHeight, 6, 6)
+    love.graphics.rectangle("fill", panelX + shadowOffsetX, panelY + shadowOffsetY, panelWidth, panelHeight, cornerRadius, cornerRadius)
 
     love.graphics.setColor(bg[1], bg[2], bg[3], 0.96)
-    love.graphics.rectangle("fill", panelX, panelY, panelWidth, panelHeight, 6, 6)
+    love.graphics.rectangle("fill", panelX, panelY, panelWidth, panelHeight, cornerRadius, cornerRadius)
 
     local _, outlineColor = Theme.getButtonColors("default")
     love.graphics.setColor(outlineColor[1], outlineColor[2], outlineColor[3], 0.9)
     love.graphics.setLineWidth(1)
-    love.graphics.rectangle("line", panelX, panelY, panelWidth, panelHeight, 6, 6)
+    love.graphics.rectangle("line", panelX, panelY, panelWidth, panelHeight, cornerRadius, cornerRadius)
 
-    local contentPadding = 10
+    local contentPadding = spacing.targetPanelContentPadding or 10
     local cx = panelX + contentPadding
     local cy = panelY + contentPadding
     local cw = panelWidth - contentPadding * 2
@@ -58,8 +63,8 @@ function TargetPanel.draw(world, player)
     local bars = HealthModel.getBarsForEntity(target)
 
     local textHeight = fontTitle:getHeight()
-    local barHeight = 12
-    local barGap = 4
+    local barHeight = spacing.targetPanelBarHeight or 12
+    local barGap = spacing.targetPanelBarGap or 4
     local barY = cy + textHeight + 6
 
     for _, bar in ipairs(bars) do

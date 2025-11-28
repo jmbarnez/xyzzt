@@ -33,7 +33,7 @@ function HUD.draw(world, player)
             local coord_y = MAP_MARGIN + MAP_SIZE + 10 -- 10px spacing below minimap
 
             love.graphics.setFont(Theme.getFont("default"))
-            love.graphics.setColor(0.7, 0.9, 1.0, 0.9)
+            love.graphics.setColor(Theme.colors.accents.hudInfo)
 
             -- Sector coordinates
             local sector_text = string.format("Sector: %d, %d", ship.sector.x, ship.sector.y)
@@ -52,7 +52,7 @@ function HUD.draw(world, player)
     end
 
     -- FPS Counter (Top Right)
-    love.graphics.setColor(0.2, 1.0, 0.2, 1.0)
+    love.graphics.setColor(Theme.colors.accents.hudFps)
     love.graphics.setFont(Theme.getFont("default"))
     love.graphics.print("FPS: " .. love.timer.getFPS(), sw - 60, 10)
 end

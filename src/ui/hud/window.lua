@@ -3,9 +3,10 @@ local Theme = require "src.ui.theme"
 local Window = {}
 
 local function computeLayout(x, y, width, height)
-    local titleBarHeight = 24
-    local bottomBarHeight = 22
-    local padding = 8
+    local spacing = Theme.spacing
+    local titleBarHeight = spacing.windowTitleBarHeight or 24
+    local bottomBarHeight = spacing.windowBottomBarHeight or 22
+    local padding = spacing.windowPadding or 8
 
     local titleBar = {
         x = x,
@@ -61,16 +62,20 @@ function Window.draw(opts)
 
     local layout = computeLayout(x, y, width, height)
 
+    local shapes = Theme.shapes
+    local cornerRadius = shapes.panelCornerRadius or 4
+    local closeCornerRadius = shapes.closeButtonCornerRadius or 3
+
     local bg = Theme.getBackgroundColor()
     love.graphics.setColor(bg[1], bg[2], bg[3], 0.94)
-    love.graphics.rectangle("fill", x, y, width, height, 4, 4)
+    love.graphics.rectangle("fill", x, y, width, height, cornerRadius, cornerRadius)
 
     local _, outlineColor = Theme.getButtonColors("default")
     love.graphics.setColor(outlineColor)
     love.graphics.setLineWidth(1)
-    love.graphics.rectangle("line", x, y, width, height, 4, 4)
+    love.graphics.rectangle("line", x, y, width, height, cornerRadius, cornerRadius)
 
-    love.graphics.setColor(0.06, 0.08, 0.16, 1.0)
+    love.graphics.setColor(Theme.colors.window.titleBar)
     local inset = 1
     love.graphics.rectangle(
         "fill",
@@ -78,23 +83,23 @@ function Window.draw(opts)
         layout.titleBar.y,
         layout.titleBar.w - inset * 2,
         layout.titleBar.h,
-        4,
-        4
+        cornerRadius,
+        cornerRadius
     )
 
     love.graphics.setFont(Theme.getFont("header"))
     love.graphics.setColor(Theme.colors.textPrimary)
     love.graphics.print(title, layout.titleBar.x + 10, layout.titleBar.y + 4)
 
-    love.graphics.setColor(0.06, 0.08, 0.16, 1.0)
+    love.graphics.setColor(Theme.colors.window.bottomBar)
     love.graphics.rectangle(
         "fill",
         layout.bottomBar.x + inset,
         layout.bottomBar.y,
         layout.bottomBar.w - inset * 2,
         layout.bottomBar.h,
-        4,
-        4
+        cornerRadius,
+        cornerRadius
     )
 
     if bottomText then
@@ -107,13 +112,13 @@ function Window.draw(opts)
 
     if showClose then
         local r = layout.close
-        love.graphics.setColor(0.16, 0.18, 0.24, 1.0)
-        love.graphics.rectangle("fill", r.x, r.y, r.w, r.h, 3, 3)
+        love.graphics.setColor(Theme.colors.window.closeBg)
+        love.graphics.rectangle("fill", r.x, r.y, r.w, r.h, closeCornerRadius, closeCornerRadius)
 
         love.graphics.setColor(outlineColor)
-        love.graphics.rectangle("line", r.x, r.y, r.w, r.h, 3, 3)
+        love.graphics.rectangle("line", r.x, r.y, r.w, r.h, closeCornerRadius, closeCornerRadius)
 
-        love.graphics.setColor(1.0, 0.35, 0.35, 1.0)
+        love.graphics.setColor(Theme.colors.window.closeAccent)
         love.graphics.setLineWidth(1.4)
         love.graphics.line(r.x + 3, r.y + 3, r.x + r.w - 3, r.y + r.h - 3)
         love.graphics.line(r.x + 3, r.y + r.h - 3, r.x + r.w - 3, r.y + 3)

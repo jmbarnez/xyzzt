@@ -1,3 +1,5 @@
+local Theme = require "src.ui.theme"
+
 local HealthModel = {}
 
 function HealthModel.getBarsForEntity(entity)
@@ -10,14 +12,16 @@ function HealthModel.getBarsForEntity(entity)
     local has_shield = (entity.shield and entity.shield.max and entity.shield.current)
 
     if has_hull or has_shield then
+        local healthColors = Theme.colors.health
+
         if has_shield then
             table.insert(bars, {
                 id = "shield",
                 label = "Shield",
                 current = entity.shield.current,
                 max = entity.shield.max,
-                fill = { 0.2, 0.95, 1.0, 0.95 },
-                bg = { 0.04, 0.08, 0.14, 0.9 },
+                fill = healthColors and healthColors.shieldFill or { 0.2, 0.95, 1.0, 0.95 },
+                bg = healthColors and healthColors.shieldBg or { 0.04, 0.08, 0.14, 0.9 },
                 priority = 1,
             })
         end
@@ -28,21 +32,22 @@ function HealthModel.getBarsForEntity(entity)
                 label = "Hull",
                 current = entity.hull.current,
                 max = entity.hull.max,
-                fill = { 0.95, 0.25, 0.25, 0.95 },
-                bg = { 0.08, 0.05, 0.07, 0.9 },
+                fill = healthColors and healthColors.hullFill or { 0.95, 0.25, 0.25, 0.95 },
+                bg = healthColors and healthColors.hullBg or { 0.08, 0.05, 0.07, 0.9 },
                 priority = 2,
             })
         end
 
     elseif entity.hp and entity.hp.max and entity.hp.current then
         -- Generic HP users (asteroids, chunks, etc.)
+        local healthColors = Theme.colors.health
         table.insert(bars, {
             id = "hp",
             label = "HP",
             current = entity.hp.current,
             max = entity.hp.max,
-            fill = { 0.95, 0.25, 0.25, 0.95 },
-            bg = { 0.08, 0.05, 0.07, 0.9 },
+            fill = healthColors and healthColors.hpFill or { 0.95, 0.25, 0.25, 0.95 },
+            bg = healthColors and healthColors.hpBg or { 0.08, 0.05, 0.07, 0.9 },
             priority = 1,
         })
     end

@@ -21,29 +21,35 @@ function StatusPanel.draw(player)
 
     -- Panel positioning (top-left)
     local sw, _ = love.graphics.getDimensions()
-    local margin = 16
-    local panelWidth = 300
-    local panelHeight = 80
+    local spacing = Theme.spacing
+    local shapes = Theme.shapes
+    local margin = spacing.hudMargin or 16
+    local panelWidth = spacing.statusPanelWidth or 300
+    local panelHeight = spacing.statusPanelHeight or 80
     local panelX = margin
     local panelY = margin
 
+    local shadowOffsetX = shapes.shadowOffsetX or 3
+    local shadowOffsetY = shapes.shadowOffsetY or 4
+    local cornerRadius = shapes.panelCornerRadius or 4
+
     -- Drop shadow
     love.graphics.setColor(0, 0, 0, 0.45)
-    love.graphics.rectangle("fill", panelX + 3, panelY + 4, panelWidth, panelHeight, 4, 4)
+    love.graphics.rectangle("fill", panelX + shadowOffsetX, panelY + shadowOffsetY, panelWidth, panelHeight, cornerRadius, cornerRadius)
 
     -- Panel Background (single solid color)
     local bg = Theme.getBackgroundColor()
     love.graphics.setColor(bg[1], bg[2], bg[3], 0.94)
-    love.graphics.rectangle("fill", panelX, panelY, panelWidth, panelHeight, 4, 4)
+    love.graphics.rectangle("fill", panelX, panelY, panelWidth, panelHeight, cornerRadius, cornerRadius)
 
     -- Panel Outline
     local _, outlineColor = Theme.getButtonColors("default")
     love.graphics.setColor(outlineColor)
     love.graphics.setLineWidth(1)
-    love.graphics.rectangle("line", panelX, panelY, panelWidth, panelHeight, 4, 4)
+    love.graphics.rectangle("line", panelX, panelY, panelWidth, panelHeight, cornerRadius, cornerRadius)
 
     -- Layout inside panel
-    local contentPadding = 10
+    local contentPadding = spacing.panelContentPadding or 10
     local cx = panelX + contentPadding
     local cy = panelY + contentPadding
     local cw = panelWidth - contentPadding * 2
@@ -54,7 +60,7 @@ function StatusPanel.draw(player)
     local fontLabel = Theme.getFont("chat")
 
     -- === LEFT: Level + XP Ring ===
-    local levelRadius = 18
+    local levelRadius = spacing.hudLevelRadius or 18
     local levelCenterX = cx + levelRadius + 4
     local levelCenterY = panelY + panelHeight * 0.5
 
@@ -92,11 +98,11 @@ function StatusPanel.draw(player)
 
     -- XP Ring (background disk + vertically filling interior)
     love.graphics.setLineWidth(4)
-    love.graphics.setColor(0.06, 0.08, 0.16, 1.0)
+    love.graphics.setColor(Theme.colors.health.ringBg)
     love.graphics.circle("fill", levelCenterX, levelCenterY, levelRadius + 2)
 
     -- XP fill: a vertical "tank" filling inside the circle
-    local xpColor = Theme.colors.cargo and Theme.colors.cargo.barFill or { 0.25, 0.95, 0.55, 1.0 }
+    local xpColor = Theme.colors.health.xpFill
     local r, g, b, a = xpColor[1], xpColor[2], xpColor[3], xpColor[4] or 1.0
     local brightness = 1 + 0.6 * flashAlpha
     r = math.min(1, r * brightness)
@@ -148,8 +154,8 @@ function StatusPanel.draw(player)
     local rightX = dividerX + 6
     local rightWidth = panelX + panelWidth - contentPadding - rightX
     local barWidth = rightWidth
-    local barHeight = 12
-    local barGap = 7
+    local barHeight = spacing.hudBarHeight or 12
+    local barGap = spacing.hudBarGap or 7
 
     local bars = HealthModel.getBarsForEntity(ship or player)
     local barCount = math.min(#bars, 2)
@@ -185,8 +191,8 @@ function StatusPanel.draw(player)
     end
 
     local energyBarY = barY
-    local energyFill = { 1.0, 0.9, 0.3, 0.95 }
-    local energyBg = { 0.1, 0.08, 0.02, 0.9 }
+    local energyFill = Theme.colors.health.energyFill
+    local energyBg = Theme.colors.health.energyBg
 
     HealthBar.draw(
         rightX,

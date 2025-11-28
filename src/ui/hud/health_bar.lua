@@ -1,3 +1,5 @@
+local Theme = require "src.ui.theme"
+
 local HealthBar = {}
 
 function HealthBar.draw(x, y, width, height, current, max, colorFill, colorBg, showBorder)
@@ -6,18 +8,21 @@ function HealthBar.draw(x, y, width, height, current, max, colorFill, colorBg, s
         pct = math.max(0, math.min(1, (current or 0) / max))
     end
 
+    local shapes = Theme.shapes
+    local barRadius = shapes.healthBarCornerRadius or 3
+
     love.graphics.setColor(colorBg)
-    love.graphics.rectangle("fill", x, y, width, height, 3, 3)
+    love.graphics.rectangle("fill", x, y, width, height, barRadius, barRadius)
 
     if pct > 0 then
         love.graphics.setColor(colorFill)
-        love.graphics.rectangle("fill", x, y, width * pct, height, 3, 3)
+        love.graphics.rectangle("fill", x, y, width * pct, height, barRadius, barRadius)
     end
 
     if showBorder then
-        love.graphics.setColor(0, 0, 0, 0.85)
+        love.graphics.setColor(Theme.colors.health.border)
         love.graphics.setLineWidth(1)
-        love.graphics.rectangle("line", x, y, width, height, 3, 3)
+        love.graphics.rectangle("line", x, y, width, height, barRadius, barRadius)
     end
 end
 

@@ -6,11 +6,65 @@ local CargoPanel = {}
 -- Cache for item icon shapes to prevent regeneration each frame
 local icon_shape_cache = {}
 
+local function getOrderedItems(world, cargo)
+    local items_map = {}
+    for name, count in pairs(cargo.items or {}) do
+        items_map[name] = count
+    end
+
+    local ordered_names = {}
+    local ui = world and world.ui
+
+    if ui then
+        ui.cargo_item_order = ui.cargo_item_order or {}
+        local existing_order = ui.cargo_item_order
+        local present = {}
+
+        for name, _ in pairs(items_map) do
+            present[name] = true
+        end
+
+        for _, name in ipairs(existing_order) do
+            if present[name] then
+                table.insert(ordered_names, name)
+                present[name] = nil
+            end
+        end
+
+        local remaining = {}
+        for name, _ in pairs(present) do
+            table.insert(remaining, name)
+        end
+        table.sort(remaining)
+        for _, name in ipairs(remaining) do
+            table.insert(ordered_names, name)
+        end
+
+        ui.cargo_item_order = ordered_names
+    else
+        for name, _ in pairs(items_map) do
+            table.insert(ordered_names, name)
+        end
+        table.sort(ordered_names)
+    end
+
+    local ordered_items = {}
+    for _, name in ipairs(ordered_names) do
+        local count = items_map[name]
+        if count then
+            table.insert(ordered_items, { name = name, count = count })
+        end
+    end
+
+    return ordered_items
+end
+
 function CargoPanel.getWindowRect(world)
     local sw, sh = love.graphics.getDimensions()
 
-    local defaultWidth = 1260
-    local defaultHeight = 780
+    local spacing = Theme.spacing
+    local defaultWidth = spacing.cargoWindowWidth or 720
+    local defaultHeight = spacing.cargoWindowHeight or 420
 
     local ui = world and world.ui
     if ui and ui.cargo_window then
@@ -34,6 +88,9 @@ function CargoPanel.draw(world, player)
     if not player then
         return
     end
+
+    local spacing = Theme.spacing
+    local shapes = Theme.shapes
 
     -- Find the ship (if any)
     local ship
@@ -73,8 +130,8 @@ function CargoPanel.draw(world, player)
     love.graphics.print(infoText, bottomBar.x + 10, bottomBar.y + 4)
 
     -- Capacity bar on the right side of bottom bar
-    local barWidth = 150
-    local barHeight = 14
+    local barWidth = spacing.cargoCapacityBarWidth or 150
+    local barHeight = spacing.cargoCapacityBarHeight or 14
     local barX = bottomBar.x + bottomBar.w - barWidth - 10
     local barY = bottomBar.y + (bottomBar.h - barHeight) * 0.5
 
@@ -86,7 +143,8 @@ function CargoPanel.draw(world, player)
     -- Bar background
     local cColors = Theme.colors.cargo
     love.graphics.setColor(cColors.barBackground)
-    love.graphics.rectangle("fill", barX, barY, barWidth, barHeight, 2, 2)
+    local slotCornerRadius = shapes.slotCornerRadius or 2
+    love.graphics.rectangle("fill", barX, barY, barWidth, barHeight, slotCornerRadius, slotCornerRadius)
 
     -- Bar fill
     if pct > 0 then
@@ -97,13 +155,13 @@ function CargoPanel.draw(world, player)
             fillColor = cColors.barFillWarning
         end
         love.graphics.setColor(fillColor)
-        love.graphics.rectangle("fill", barX, barY, barWidth * pct, barHeight, 2, 2)
+        love.graphics.rectangle("fill", barX, barY, barWidth * pct, barHeight, slotCornerRadius, slotCornerRadius)
     end
 
     -- Bar outline
     love.graphics.setColor(cColors.barOutline)
     love.graphics.setLineWidth(1)
-    love.graphics.rectangle("line", barX, barY, barWidth, barHeight, 2, 2)
+    love.graphics.rectangle("line", barX, barY, barWidth, barHeight, slotCornerRadius, slotCornerRadius)
 
     -- Percentage text on bar
     local pctText = string.format("%d%%", math.floor(pct * 100))
@@ -117,12 +175,13 @@ function CargoPanel.draw(world, player)
     local fontText = Theme.getFont("chat")
     love.graphics.setFont(fontText)
 
-    -- Grid of item "slots" inside the content area (RuneScape-style, invisible slots)
-    local items = {}
-    for name, count in pairs(cargo.items or {}) do
-        table.insert(items, { name = name, count = count })
+    local ui = world and world.ui
+    if ui then
+        ui.cargo_slots = {}
     end
-    table.sort(items, function(a, b) return a.name < b.name end)
+
+    -- Grid of item "slots" inside the content area (RuneScape-style, invisible slots)
+    local items = getOrderedItems(world, cargo)
 
     if #items == 0 then
         love.graphics.setColor(Theme.colors.textMuted)
@@ -130,51 +189,35 @@ function CargoPanel.draw(world, player)
         return
     end
 
-    local slotSize = 64 -- Increased from 32 to fit icon + text
-    local slotGap = 8
+    local slotSize = spacing.cargoSlotSize or 64 -- Increased from 32 to fit icon + text
+    local slotGap = spacing.cargoSlotGap or 8
     local cols = math.max(1, math.floor((cw + slotGap) / (slotSize + slotGap)))
 
     -- Load item definitions for rendering icons
     local ItemDefinitions = require "src.data.items"
 
-    for index, it in ipairs(items) do
-        local idx = index - 1
-        local col = idx % cols
-        local row = math.floor(idx / cols)
+    local drag = ui and ui.cargo_item_drag
+    local drag_index = drag and drag.active and drag.index or nil
+    local drag_item = nil
 
-        local sx = cx + col * (slotSize + slotGap)
-        local sy = cy + row * (slotSize + slotGap)
-
-        -- Stop drawing if we run out of vertical space
-        if sy + slotSize > cy + ch then
-            break
-        end
-
-        -- Draw slot background (subtle)
+    local function drawItem(it, sx, sy)
         love.graphics.setColor(cColors.slotBackground)
-        love.graphics.rectangle("fill", sx, sy, slotSize, slotSize, 2, 2)
-        love.graphics.setColor(cColors.slotOutline)
-        love.graphics.setLineWidth(1)
-        love.graphics.rectangle("line", sx, sy, slotSize, slotSize, 2, 2)
+        love.graphics.rectangle("fill", sx, sy, slotSize, slotSize, slotCornerRadius, slotCornerRadius)
 
-        -- Draw item icon (rendered shape) in center of slot
         local item_def = ItemDefinitions[it.name:lower()]
         if item_def and item_def.render then
             love.graphics.push()
-            love.graphics.translate(sx + slotSize * 0.5, sy + slotSize * 0.4) -- Center upper portion
+            love.graphics.translate(sx + slotSize * 0.5, sy + slotSize * 0.4)
 
-            -- Get or generate the item shape (cached to prevent spinning)
             local cache_key = it.name:lower()
             local vertices = icon_shape_cache[cache_key]
             if not vertices then
-                -- Generate once and cache it
                 vertices = item_def:generate_shape()
                 icon_shape_cache[cache_key] = vertices
             end
 
             local color = item_def.render.color or { 0.6, 0.6, 0.65, 1 }
 
-            -- Scale up the icon for visibility
             local scale = 3.0
             love.graphics.push()
             love.graphics.scale(scale, scale)
@@ -182,7 +225,6 @@ function CargoPanel.draw(world, player)
             love.graphics.setColor(color[1], color[2], color[3], color[4] or 1)
             if vertices and #vertices >= 6 then
                 love.graphics.polygon("fill", vertices)
-                -- Draw outline
                 love.graphics.setColor(color[1] * 0.5, color[2] * 0.5, color[3] * 0.5, (color[4] or 1))
                 love.graphics.setLineWidth(0.5)
                 love.graphics.polygon("line", vertices)
@@ -192,19 +234,16 @@ function CargoPanel.draw(world, player)
             love.graphics.pop()
         end
 
-        -- Draw amount in top-right corner
         local countText = tostring(it.count or 0)
         local countW = fontText:getWidth(countText)
         local countH = fontText:getHeight()
 
-        -- Background for count to improve readability
         love.graphics.setColor(0, 0, 0, 0.7)
         love.graphics.rectangle("fill", sx + slotSize - countW - 4, sy + 2, countW + 4, countH + 2, 1, 1)
 
         love.graphics.setColor(cColors.textCount)
         love.graphics.print(countText, sx + slotSize - countW - 2, sy + 2)
 
-        -- Draw name at bottom-center of slot
         local nameText = it.name
         local nameW = fontText:getWidth(nameText)
         local nameX = sx + (slotSize - nameW) * 0.5
@@ -212,6 +251,36 @@ function CargoPanel.draw(world, player)
 
         love.graphics.setColor(cColors.textName)
         love.graphics.print(nameText, nameX, nameY)
+    end
+
+    for index, it in ipairs(items) do
+        local idx = index - 1
+        local col = idx % cols
+        local row = math.floor(idx / cols)
+
+        local sx = cx + col * (slotSize + slotGap)
+        local sy = cy + row * (slotSize + slotGap)
+
+        if sy + slotSize > cy + ch then
+            break
+        end
+
+        if ui and ui.cargo_slots then
+            ui.cargo_slots[index] = { x = sx, y = sy, w = slotSize, h = slotSize, item = it }
+        end
+
+        if drag_index == index then
+            drag_item = it
+        else
+            drawItem(it, sx, sy)
+        end
+    end
+
+    if drag and drag.active and drag_item and drag_index then
+        local mx, my = love.mouse.getPosition()
+        local sx = mx - (drag.offset_x or (slotSize * 0.5))
+        local sy = my - (drag.offset_y or (slotSize * 0.5))
+        drawItem(drag_item, sx, sy)
     end
 end
 
@@ -271,17 +340,70 @@ function CargoPanel.mousepressed(x, y, button, world)
         return true -- Consumed
     end
 
+    local ui = world.ui
+    if ui and ui.cargo_slots then
+        for index, slot in ipairs(ui.cargo_slots) do
+            if x >= slot.x and x <= slot.x + slot.w and y >= slot.y and y <= slot.y + slot.h then
+                ui.cargo_item_drag = ui.cargo_item_drag or {}
+                ui.cargo_item_drag.active = true
+                ui.cargo_item_drag.index = index
+                ui.cargo_item_drag.item_name = slot.item and slot.item.name or nil
+                ui.cargo_item_drag.offset_x = x - slot.x
+                ui.cargo_item_drag.offset_y = y - slot.y
+                return true
+            end
+        end
+    end
+
     return false
 end
 
 function CargoPanel.mousereleased(x, y, button, world)
     if button ~= 1 then return false end
-    if not (world and world.ui and world.ui.cargo_drag) then return false end
+    if not (world and world.ui) then return false end
 
-    if world.ui.cargo_drag.active then
-        world.ui.cargo_drag.active = false
-        return true -- Consumed
+    local ui = world.ui
+    local consumed = false
+
+    if ui.cargo_item_drag and ui.cargo_item_drag.active then
+        local drag = ui.cargo_item_drag
+        local slots = ui.cargo_slots or {}
+        local order = ui.cargo_item_order or {}
+
+        local target_index
+        for index, slot in ipairs(slots) do
+            if x >= slot.x and x <= slot.x + slot.w and y >= slot.y and y <= slot.y + slot.h then
+                target_index = index
+                break
+            end
+        end
+
+        local from_index = drag.index
+        if target_index and from_index and from_index ~= target_index and order[from_index] then
+            local name = table.remove(order, from_index)
+            if name then
+                if target_index > #order + 1 then
+                    target_index = #order + 1
+                end
+                table.insert(order, target_index, name)
+            end
+        end
+
+        drag.active = false
+        drag.index = nil
+        drag.item_name = nil
+        consumed = true
     end
+
+    if ui.cargo_drag and ui.cargo_drag.active then
+        ui.cargo_drag.active = false
+        consumed = true
+    end
+
+    if consumed then
+        return true
+    end
+
     return false
 end
 

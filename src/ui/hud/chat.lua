@@ -1,5 +1,6 @@
 local Theme = require "src.ui.theme"
 local utf8 = require "utf8"
+local spacing = Theme.spacing
 
 local Chat = {
     active = false,
@@ -9,18 +10,11 @@ local Chat = {
     maxLines = 50,
     
     -- Layout
-    x = 20,
-    width = 600,
-    height = 300,
+    x = spacing.chatMarginX or 20,
+    width = spacing.chatWidth or 600,
+    height = spacing.chatHeight or 300,
     
-    colors = {
-        background = {0, 0, 0, 0.5},
-        inputBackground = {0.1, 0.1, 0.1, 0.9},
-        text = {1, 1, 1, 1},
-        system = {1, 1, 0, 1},
-        error = {1, 0.2, 0.2, 1},
-        debug = {0.7, 0.7, 0.7, 1},
-    }
+    colors = Theme.colors.chat,
 }
 
 function Chat.init()
@@ -88,7 +82,8 @@ function Chat.draw()
     local bottom = screenH - 20
     
     -- If active, shift up to make room for input box
-    local inputHeight = 30
+    local inputHeight = Theme.spacing.chatInputHeight or 30
+    
     local listBottom = bottom - (Chat.active and inputHeight or 0)
     
     love.graphics.setFont(Chat.font)
@@ -104,7 +99,7 @@ function Chat.draw()
         
         local timePrefix = ""
         if line.timestamp then
-            timePrefix = os.date("[%H:%M] ", line.timestamp)
+            timePrefix = tostring(os.date("[%H:%M] ", line.timestamp))
         end
         local fullText = timePrefix .. line.text
         
