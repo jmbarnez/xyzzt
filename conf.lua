@@ -20,7 +20,7 @@ function love.conf(t)
         t.window.height = 900
         t.window.fullscreen = false
         t.window.resizable = true
-        t.window.vsync = true -- Cap at monitor refresh rate (usually 60Hz)
+        t.window.vsync = false
         t.window.msaa = 2
     end
 

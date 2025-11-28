@@ -148,7 +148,7 @@ function PlayState:update(dt)
     end
 
     -- 5. UI Updates
-    self:updateHover()
+    self:updateHover(dt)
     CargoPanel.update(dt, self.world)
 end
 
@@ -405,8 +405,14 @@ function PlayState:sendClientInput()
     PlayNetwork.sendClientInput(self)
 end
 
-function PlayState:updateHover()
+function PlayState:updateHover(dt)
     if not (self.world and self.world.camera and self.world.ui) then return end
+
+    self._hoverAccumulator = (self._hoverAccumulator or 0) + dt
+    if self._hoverAccumulator < 0.05 then
+        return
+    end
+    self._hoverAccumulator = 0
 
     local mx, my = love.mouse.getPosition()
     local wx, wy = self.world.camera:worldCoords(mx, my)

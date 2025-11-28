@@ -32,7 +32,11 @@ function TrailSystem:update(dt)
         local vehicle = e.vehicle
 
         -- Emit if any movement key is pressed or if moving fast enough
-        local is_moving = (e.input and (e.input.thrust or e.input.move_x ~= 0 or e.input.move_y ~= 0)) or
+        local is_moving = (e.input and (
+            e.input.thrust or
+            (e.input.move_x and e.input.move_x ~= 0) or
+            (e.input.move_y and e.input.move_y ~= 0)
+        )) or
         (vehicle and vehicle.speed and vehicle.speed > 10)
 
         if trail_comp.trails then
@@ -95,8 +99,6 @@ function TrailSystem:update(dt)
 
                 -- Emit particles if moving
                 if is_moving then
-                    ps:emit(1) -- Emit based on rate is handled automatically if we use start(), but manual emit gives more control?
-                    -- Actually, let's use start/stop
                     if not ps:isActive() then
                         ps:start()
                     end
