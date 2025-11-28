@@ -52,6 +52,7 @@ function ShipManager.spawn(world, ship_def, x, y, is_host_player)
     if is_host_player then
         ship:give("name", Config.PLAYER_NAME or "Player")
         ship:give("pilot")
+        ship:give("energy", 100)
     end
 
     -- Add trail component
