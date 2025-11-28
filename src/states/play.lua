@@ -182,7 +182,7 @@ function PlayState:keypressed(key)
     if self.world and self.world.player_dead then
         if key == "escape" then
             Gamestate.switch(require("src.states.menu"))
-        elseif key == "r" or key == "return" or key == "space" then
+        elseif key == "r" then
             self:respawnLocalPlayer()
         end
         return
