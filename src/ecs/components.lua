@@ -85,6 +85,11 @@ Concord.component("shield", function(c, max, regen)
     c.regen = regen or 0
 end)
 
+Concord.component("energy", function(c, max, current)
+    c.max = max or 100
+    c.current = current or c.max
+end)
+
 Concord.component("wallet", function(c, credits)
     c.credits = credits or 0
 end)

@@ -2,7 +2,10 @@ local Theme = require "src.ui.theme"
 local HealthBar = require "src.ui.hud.health_bar"
 local HealthModel = require "src.ui.hud.health_model"
 
-local StatusPanel = {}
+local StatusPanel = {
+    _lastLevel = nil,
+    _flashUntil = 0,
+}
 
 -- Draw the status panel in the top-left, with level on the left and bars on the right
 function StatusPanel.draw(player)
@@ -20,24 +23,24 @@ function StatusPanel.draw(player)
     local sw, _ = love.graphics.getDimensions()
     local margin = 16
     local panelWidth = 300
-    local panelHeight = 60
+    local panelHeight = 80
     local panelX = margin
     local panelY = margin
 
     -- Drop shadow
     love.graphics.setColor(0, 0, 0, 0.45)
-    love.graphics.rectangle("fill", panelX + 3, panelY + 4, panelWidth, panelHeight, 6, 6)
+    love.graphics.rectangle("fill", panelX + 3, panelY + 4, panelWidth, panelHeight, 4, 4)
 
     -- Panel Background (single solid color)
     local bg = Theme.getBackgroundColor()
-    love.graphics.setColor(bg[1], bg[2], bg[3], 0.96)
-    love.graphics.rectangle("fill", panelX, panelY, panelWidth, panelHeight, 6, 6)
+    love.graphics.setColor(bg[1], bg[2], bg[3], 0.94)
+    love.graphics.rectangle("fill", panelX, panelY, panelWidth, panelHeight, 4, 4)
 
     -- Panel Outline
     local _, outlineColor = Theme.getButtonColors("default")
-    love.graphics.setColor(outlineColor[1], outlineColor[2], outlineColor[3], 0.9)
+    love.graphics.setColor(outlineColor)
     love.graphics.setLineWidth(1)
-    love.graphics.rectangle("line", panelX, panelY, panelWidth, panelHeight, 6, 6)
+    love.graphics.rectangle("line", panelX, panelY, panelWidth, panelHeight, 4, 4)
 
     -- Layout inside panel
     local contentPadding = 10
@@ -47,7 +50,7 @@ function StatusPanel.draw(player)
     local ch = panelHeight - contentPadding * 2
 
     -- Fonts
-    local fontLevel = Theme.getFont("default")
+    local fontLevel = Theme.getFont("header")
     local fontLabel = Theme.getFont("chat")
 
     -- === LEFT: Level + XP Ring ===
@@ -63,20 +66,67 @@ function StatusPanel.draw(player)
         xpRatio = math.max(0, math.min(1, xp / nextXp))
     end
 
-    local startAngle = -math.pi / 2
-    local endAngle = startAngle + (2 * math.pi * xpRatio)
+    -- Visual mapping: keep true xpRatio for logic, but ensure even small amounts of XP
+    -- produce a clearly visible fill in the ring.
+    local visualRatio = xpRatio
+    local minVisible = 0.08
+    if xp > 0 and visualRatio < minVisible then
+        visualRatio = minVisible
+    end
 
-    -- XP Ring (background track)
+    local currentLevel = (levelComponent and levelComponent.current) or 1
+    local now = (love.timer and love.timer.getTime and love.timer.getTime()) or 0
+
+    if StatusPanel._lastLevel and currentLevel > StatusPanel._lastLevel then
+        StatusPanel._flashUntil = now + 0.4
+    end
+    StatusPanel._lastLevel = currentLevel
+
+    local flashAlpha = 0
+    if StatusPanel._flashUntil and now < StatusPanel._flashUntil then
+        local duration = 0.4
+        flashAlpha = (StatusPanel._flashUntil - now) / duration
+        if flashAlpha < 0 then flashAlpha = 0 end
+        if flashAlpha > 1 then flashAlpha = 1 end
+    end
+
+    -- XP Ring (background disk + vertically filling interior)
     love.graphics.setLineWidth(4)
-    love.graphics.setColor(0.04, 0.06, 0.14, 0.9)
-    love.graphics.circle("fill", levelCenterX, levelCenterY, levelRadius + 1)
+    love.graphics.setColor(0.06, 0.08, 0.16, 1.0)
+    love.graphics.circle("fill", levelCenterX, levelCenterY, levelRadius + 2)
 
-    love.graphics.setColor(0.12, 0.16, 0.28, 1.0)
-    love.graphics.arc("line", levelCenterX, levelCenterY, levelRadius, 0, 2 * math.pi)
+    -- XP fill: a vertical "tank" filling inside the circle
+    local xpColor = Theme.colors.cargo and Theme.colors.cargo.barFill or { 0.25, 0.95, 0.55, 1.0 }
+    local r, g, b, a = xpColor[1], xpColor[2], xpColor[3], xpColor[4] or 1.0
+    local brightness = 1 + 0.6 * flashAlpha
+    r = math.min(1, r * brightness)
+    g = math.min(1, g * brightness)
+    b = math.min(1, b * brightness)
 
-    -- XP arc
-    love.graphics.setColor(0.25, 0.95, 0.55, 1.0)
-    love.graphics.arc("line", levelCenterX, levelCenterY, levelRadius, startAngle, endAngle)
+    love.graphics.stencil(function()
+        love.graphics.circle("fill", levelCenterX, levelCenterY, levelRadius)
+    end, "replace", 1)
+    love.graphics.setStencilTest("equal", 1)
+
+    local diameter = levelRadius * 2
+    local fillHeight = diameter * visualRatio
+    local fillY = (levelCenterY + levelRadius) - fillHeight
+    local fillX = levelCenterX - levelRadius
+    love.graphics.setColor(r, g, b, a)
+    love.graphics.rectangle("fill", fillX, fillY, diameter, fillHeight)
+
+    if fillHeight > 0 then
+        local highlightHeight = math.min(fillHeight * 0.35, diameter * 0.4)
+        love.graphics.setColor(1, 1, 1, 0.18 + 0.2 * flashAlpha)
+        love.graphics.rectangle("fill", fillX, fillY, diameter, highlightHeight)
+    end
+
+    love.graphics.setStencilTest()
+
+    -- Ring outline on top
+    local outlineAlpha = 0.7 + 0.3 * flashAlpha
+    love.graphics.setColor(outlineColor[1], outlineColor[2], outlineColor[3], outlineAlpha)
+    love.graphics.circle("line", levelCenterX, levelCenterY, levelRadius)
     love.graphics.setLineWidth(1)
 
     -- Level text in the center
@@ -102,10 +152,13 @@ function StatusPanel.draw(player)
     local barGap = 7
 
     local bars = HealthModel.getBarsForEntity(ship or player)
+    local barCount = math.min(#bars, 2)
 
     local barY = cy + 2
+    love.graphics.setFont(fontLabel)
     for i, bar in ipairs(bars) do
-        if i > 2 then break end
+        if i > barCount then break end
+
         HealthBar.draw(
             rightX,
             barY,
@@ -120,17 +173,32 @@ function StatusPanel.draw(player)
         barY = barY + barHeight + barGap
     end
 
-    local numDivisions = 8
-    love.graphics.setColor(0, 0, 0, 0.6)
-    love.graphics.setLineWidth(1)
-    for i = 1, numDivisions - 1 do
-        local t = i / numDivisions
-        local tickX = rightX + barWidth * t
-        local firstBarY = cy + 2
-        love.graphics.line(tickX, firstBarY + 2, tickX, firstBarY + barHeight - 2)
-        local secondBarY = firstBarY + barHeight + barGap
-        love.graphics.line(tickX, secondBarY + 2, tickX, secondBarY + barHeight - 2)
+    -- Energy bar (yellow), always rendered as a third row
+    local energyMax = 100
+    local energyCurrent = energyMax
+    if ship and ship.energy and ship.energy.max and ship.energy.current then
+        energyMax = ship.energy.max
+        energyCurrent = ship.energy.current
+    elseif player and player.energy and player.energy.max and player.energy.current then
+        energyMax = player.energy.max
+        energyCurrent = player.energy.current
     end
+
+    local energyBarY = barY
+    local energyFill = { 1.0, 0.9, 0.3, 0.95 }
+    local energyBg = { 0.1, 0.08, 0.02, 0.9 }
+
+    HealthBar.draw(
+        rightX,
+        energyBarY,
+        barWidth,
+        barHeight,
+        energyCurrent or 0,
+        energyMax or 0,
+        energyFill,
+        energyBg,
+        true
+    )
 
     love.graphics.setLineWidth(1)
 end

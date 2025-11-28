@@ -23,35 +23,15 @@ local function stringToSeed(s)
     end
     return h
 end
-
-local settingsFileName = "world_settings.txt"
-local lastWorldName
-local lastWorldSeed
-
+ 
 local NewGameState = {}
 
 function NewGameState:enter()
     self.fontTitle = Theme.getFont("button")
     self.fontLabel = Theme.getFont("button")
     self.fontButton = Theme.getFont("button")
-
-    if not lastWorldName or not lastWorldSeed then
-        if love.filesystem and love.filesystem.getInfo then
-            local info = love.filesystem.getInfo(settingsFileName)
-            if info then
-                local ok, data = pcall(love.filesystem.read, settingsFileName)
-                if ok and data then
-                    local savedName, savedSeed = data:match("([^\n]+)\n([^\n]+)")
-                    if savedName and savedSeed then
-                        lastWorldName = savedName
-                        lastWorldSeed = savedSeed
-                    end
-                end
-            end
-        end
-    end
-
-    self.worldName = lastWorldName or "New World"
+ 
+    self.worldName = "New World"
     self.seedString = generateRandomSeed()
     self.activeField = "name"
 
@@ -262,17 +242,6 @@ function NewGameState:startGame(role)
     Config.UNIVERSE_NAME = name
     Config.UNIVERSE_SEED = numericSeed
     Config.UNIVERSE_SEED_STRING = seedString
-
-    lastWorldName = name
-    lastWorldSeed = seedString
-
-    if love.filesystem and love.filesystem.write then
-        local ok, err = pcall(love.filesystem.write, settingsFileName, name .. "\n" .. seedString)
-        if not ok then
-            print("NewGameState: failed to save world settings: " .. tostring(err))
-        end
-    end
-
     Gamestate.switch(PlayState, role or "SINGLE")
 end
 
