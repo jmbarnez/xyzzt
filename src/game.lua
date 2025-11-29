@@ -30,26 +30,11 @@ function love.load()
 end
 
 function love.update(dt)
-    -- Only update lurker if it's loaded (development mode)
     if Lurker then
         Lurker.update(dt)
     end
 
-    -- Fixed timestep physics: accumulate time and run physics in fixed increments
-    physics_accumulator = physics_accumulator + dt
-
-    local steps = 0
-    while physics_accumulator >= PHYSICS_TIMESTEP and steps < MAX_PHYSICS_STEPS do
-        -- Run gamestate update with FIXED timestep for deterministic physics
-        Gamestate.update(PHYSICS_TIMESTEP)
-        physics_accumulator = physics_accumulator - PHYSICS_TIMESTEP
-        steps = steps + 1
-    end
-
-    -- If we hit max steps, discard remaining time to prevent spiral of death
-    if steps >= MAX_PHYSICS_STEPS then
-        physics_accumulator = 0
-    end
+    Gamestate.update(dt)
 end
 
 function love.draw()

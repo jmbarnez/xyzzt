@@ -18,6 +18,20 @@ local CORNER_RADIUS = 12  -- Radius for rounded corners
 local BORDER_COLOR  = { 1, 1, 1, 0.65 }
 local BG_COLOR      = { 0.01, 0.015, 0.035, 1.0 }
 
+function MinimapSystem:init()
+    self._canvas = nil
+    self._accumulator = 0
+    self._dirty = true
+end
+
+function MinimapSystem:update(dt)
+    self._accumulator = (self._accumulator or 0) + dt
+    if self._accumulator >= 0.1 then
+        self._accumulator = 0
+        self._dirty = true
+    end
+end
+
 function MinimapSystem:draw()
     local screen_w, screen_h = love.graphics.getDimensions()
 
@@ -48,75 +62,75 @@ function MinimapSystem:draw()
         end
     end
 
-    -- 3. Draw Minimap Background & Border
-    love.graphics.push()
-    love.graphics.origin() -- Reset any previous transformations
+    if not self._canvas then
+        self._canvas = love.graphics.newCanvas(MAP_SIZE, MAP_SIZE)
+        self._dirty = true
+    end
 
-    -- Draw Background (square with slight rounding)
-    love.graphics.setColor(BG_COLOR)
-    love.graphics.rectangle("fill", map_x, map_y, MAP_SIZE, MAP_SIZE, CORNER_RADIUS, CORNER_RADIUS)
+    if self._dirty then
+        local previousCanvas = love.graphics.getCanvas()
+        love.graphics.setCanvas(self._canvas)
+        love.graphics.clear(0, 0, 0, 0)
 
-    -- Draw Border
-    love.graphics.setColor(BORDER_COLOR)
-    love.graphics.setLineWidth(1.5)
-    love.graphics.rectangle("line", map_x, map_y, MAP_SIZE, MAP_SIZE, CORNER_RADIUS, CORNER_RADIUS)
+        love.graphics.push()
+        love.graphics.origin()
 
-    -- 4. Draw Entities (Clipped to Minimap)
-    -- Use a stencil rectangle to clip drawing to the minimap area
-    love.graphics.stencil(function()
-        love.graphics.rectangle("fill", map_x, map_y, MAP_SIZE, MAP_SIZE, CORNER_RADIUS, CORNER_RADIUS)
-    end, "replace", 1)
-    love.graphics.setStencilTest("greater", 0)
+        love.graphics.setColor(BG_COLOR)
+        love.graphics.rectangle("fill", 0, 0, MAP_SIZE, MAP_SIZE, CORNER_RADIUS, CORNER_RADIUS)
 
-    local center_x = map_x + MAP_SIZE / 2
-    local center_y = map_y + MAP_SIZE / 2
+        love.graphics.setColor(BORDER_COLOR)
+        love.graphics.setLineWidth(1.5)
+        love.graphics.rectangle("line", 0, 0, MAP_SIZE, MAP_SIZE, CORNER_RADIUS, CORNER_RADIUS)
 
-    for _, e in ipairs(self.drawPool) do
-        -- Skip projectiles entirely on the minimap
-        if not e.projectile then
-            local is_asteroid = e.asteroid or e.asteroid_chunk
-            local is_ship = e.vehicle
+        local center_x = MAP_SIZE / 2
+        local center_y = MAP_SIZE / 2
 
-            -- Only draw asteroids/chunks and ships; hide items and other visuals
-            if is_asteroid or is_ship then
-                local t = e.transform
-                local s = e.sector or { x = 0, y = 0 }
+        for _, e in ipairs(self.drawPool) do
+            if not e.projectile then
+                local is_asteroid = e.asteroid or e.asteroid_chunk
+                local is_ship = e.vehicle
 
-                -- Calculate position relative to camera
-                -- Handle Sector differences
-                local diff_sector_x = s.x - cam_sector_x
-                local diff_sector_y = s.y - cam_sector_y
+                if is_asteroid or is_ship then
+                    local t = e.transform
+                    local s = e.sector or { x = 0, y = 0 }
 
-                -- World difference including sectors
-                local world_diff_x = (t.x - cam_x) + (diff_sector_x * DefaultSector.SECTOR_SIZE)
-                local world_diff_y = (t.y - cam_y) + (diff_sector_y * DefaultSector.SECTOR_SIZE)
+                    local diff_sector_x = s.x - cam_sector_x
+                    local diff_sector_y = s.y - cam_sector_y
 
-                -- Map position
-                local draw_x = center_x + (world_diff_x * ZOOM_LEVEL)
-                local draw_y = center_y + (world_diff_y * ZOOM_LEVEL)
+                    local world_diff_x = (t.x - cam_x) + (diff_sector_x * DefaultSector.SECTOR_SIZE)
+                    local world_diff_y = (t.y - cam_y) + (diff_sector_y * DefaultSector.SECTOR_SIZE)
 
-                -- Check if within bounds (optimization)
-                if draw_x > map_x and draw_x < map_x + MAP_SIZE and
-                    draw_y > map_y and draw_y < map_y + MAP_SIZE then
-                    -- Determine Color/Shape based on entity type
-                    if e.asteroid or e.asteroid_chunk then
-                        love.graphics.setColor(0.6, 0.6, 0.6, 1) -- Grey for asteroids / chunks
-                        love.graphics.circle("fill", draw_x, draw_y, 3)
-                    elseif e.vehicle then                        -- Ships (player/enemies)
-                        if e == target_entity then
-                            love.graphics.setColor(0, 1, 0, 1)   -- Green for self
-                        else
-                            love.graphics.setColor(1, 0, 0, 1)   -- Red for others
+                    local draw_x = center_x + (world_diff_x * ZOOM_LEVEL)
+                    local draw_y = center_y + (world_diff_y * ZOOM_LEVEL)
+
+                    if draw_x > 0 and draw_x < MAP_SIZE and
+                        draw_y > 0 and draw_y < MAP_SIZE then
+                        if e.asteroid or e.asteroid_chunk then
+                            love.graphics.setColor(0.6, 0.6, 0.6, 1)
+                            love.graphics.circle("fill", draw_x, draw_y, 3)
+                        elseif e.vehicle then
+                            if e == target_entity then
+                                love.graphics.setColor(0, 1, 0, 1)
+                            else
+                                love.graphics.setColor(1, 0, 0, 1)
+                            end
+                            love.graphics.circle("fill", draw_x, draw_y, 4)
                         end
-                        love.graphics.circle("fill", draw_x, draw_y, 4)
                     end
                 end
             end
         end
+
+        love.graphics.pop()
+        love.graphics.setCanvas(previousCanvas)
+
+        self._dirty = false
     end
 
-    love.graphics.setStencilTest()
-    love.graphics.pop()
+    love.graphics.setColor(1, 1, 1, 1)
+    if self._canvas then
+        love.graphics.draw(self._canvas, map_x, map_y)
+    end
 end
 
 return MinimapSystem

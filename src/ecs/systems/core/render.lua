@@ -28,6 +28,8 @@ function RenderSystem:draw()
     local world = self:getWorld()
     local screen_w, screen_h = love.graphics.getDimensions()
     local camera = world.camera
+    local shader = ensureTrailShader()
+    local shaderTime = love.timer.getTime()
 
     -- 1. Find Camera Focus & Sector
     local cam_x, cam_y = 0, 0
@@ -52,12 +54,14 @@ function RenderSystem:draw()
         cam_sector_y = target_entity.sector.y or 0
     end
 
+    local half_view_w, half_view_h
+
     -- Update HUMP Camera to the local coordinates
     if camera then
         local zoom = camera.scale or 1
         local half_size = DefaultSector.SECTOR_SIZE / 2
-        local half_view_w = (screen_w / 2) / zoom
-        local half_view_h = (screen_h / 2) / zoom
+        half_view_w = (screen_w / 2) / zoom
+        half_view_h = (screen_h / 2) / zoom
 
         local min_x = -half_size + half_view_w
         local max_x = half_size - half_view_w
@@ -110,6 +114,87 @@ function RenderSystem:draw()
         love.graphics.setColor(0.3, 0.3, 0.3, 1)
         love.graphics.print("SECTOR EDGE >", DefaultSector.SECTOR_SIZE / 2 - 100, 0)
 
+        if shader then
+            shader:send("time", shaderTime)
+            love.graphics.setBlendMode("add")
+            love.graphics.setShader(shader)
+
+            for _, e in ipairs(self.drawPool) do
+                local t = e.transform
+                local s = e.sector
+
+                if not (t and s and t.x and t.y and s.x and s.y and e.trail and e.trail.trails) then
+                    goto trail_continue
+                end
+
+                local diff_x = s.x - (cam_sector_x or 0)
+                local diff_y = s.y - (cam_sector_y or 0)
+
+                if math.abs(diff_x) <= 1 and math.abs(diff_y) <= 1 then
+                    local sector_offset_x = diff_x * DefaultSector.SECTOR_SIZE
+                    local sector_offset_y = diff_y * DefaultSector.SECTOR_SIZE
+
+                    love.graphics.push()
+                    love.graphics.translate(sector_offset_x, sector_offset_y)
+
+                    for _, trail in ipairs(e.trail.trails) do
+                        if trail.particle_system then
+                            local c = trail.color or { 0, 1, 1, 1 }
+                            local tr = c[1] or 1
+                            local tg = c[2] or 1
+                            local tb = c[3] or 1
+                            if e.input and e.input.boost then
+                                tr, tg, tb = 0.8, 0.2, 1.0
+                            end
+                            shader:send("glow_tint", { tr, tg, tb })
+                            love.graphics.draw(trail.particle_system, 0, 0)
+                        end
+                    end
+
+                    love.graphics.pop()
+                end
+
+                ::trail_continue::
+            end
+
+            love.graphics.setShader()
+            love.graphics.setBlendMode("alpha")
+        else
+            love.graphics.setBlendMode("add")
+
+            for _, e in ipairs(self.drawPool) do
+                local t = e.transform
+                local s = e.sector
+
+                if not (t and s and t.x and t.y and s.x and s.y and e.trail and e.trail.trails) then
+                    goto trail_continue_no_shader
+                end
+
+                local diff_x = s.x - (cam_sector_x or 0)
+                local diff_y = s.y - (cam_sector_y or 0)
+
+                if math.abs(diff_x) <= 1 and math.abs(diff_y) <= 1 then
+                    local sector_offset_x = diff_x * DefaultSector.SECTOR_SIZE
+                    local sector_offset_y = diff_y * DefaultSector.SECTOR_SIZE
+
+                    love.graphics.push()
+                    love.graphics.translate(sector_offset_x, sector_offset_y)
+
+                    for _, trail in ipairs(e.trail.trails) do
+                        if trail.particle_system then
+                            love.graphics.draw(trail.particle_system, 0, 0)
+                        end
+                    end
+
+                    love.graphics.pop()
+                end
+
+                ::trail_continue_no_shader::
+            end
+
+            love.graphics.setBlendMode("alpha")
+        end
+
         for _, e in ipairs(self.drawPool) do
             local t = e.transform
             local s = e.sector
@@ -119,62 +204,22 @@ function RenderSystem:draw()
                 goto continue
             end
 
-
-            -- Calculate Sector Difference
             local diff_x = s.x - (cam_sector_x or 0)
             local diff_y = s.y - (cam_sector_y or 0)
 
             -- Optimization: Only draw entities in neighbor sectors
             if math.abs(diff_x) <= 1 and math.abs(diff_y) <= 1 then
-                -- Draw Trails (World Space)
-                if e.trail and e.trail.trails then
-                    -- We don't need the shader for particles (they use their own texture/colors)
-                    -- But we do need to handle the coordinate system.
-                    -- The particle systems are updated in World Space (emitters moved to world pos).
-                    -- So we should draw them at (0,0) relative to the sector offset.
-
-                    local sector_offset_x = diff_x * DefaultSector.SECTOR_SIZE
-                    local sector_offset_y = diff_y * DefaultSector.SECTOR_SIZE
-
-                    love.graphics.push()
-                    love.graphics.translate(sector_offset_x, sector_offset_y)
-
-                    -- Additive blending for glowing effect
-                    love.graphics.setBlendMode("add")
-
-                    local shader = ensureTrailShader()
-                    if shader then
-                        love.graphics.setShader(shader)
-                    end
-
-                    for _, trail in ipairs(e.trail.trails) do
-                        if trail.particle_system then
-                            if shader then
-                                shader:send("time", love.timer.getTime())
-                                local c = trail.color or { 0, 1, 1, 1 }
-                                local r = c[1] or 1
-                                local g = c[2] or 1
-                                local b = c[3] or 1
-                                if e.input and e.input.boost then
-                                    r, g, b = 0.8, 0.2, 1.0
-                                end
-                                shader:send("glow_tint", { r, g, b })
-                            end
-                            love.graphics.draw(trail.particle_system, 0, 0)
-                        end
-                    end
-
-                    if shader then
-                        love.graphics.setShader()
-                    end
-
-                    love.graphics.setBlendMode("alpha")
-                    love.graphics.pop()
-                end
-
-                -- Calculate Relative Position to Camera's Sector
                 local relative_x = t.x + (diff_x * DefaultSector.SECTOR_SIZE)
                 local relative_y = t.y + (diff_y * DefaultSector.SECTOR_SIZE)
+
+                if camera then
+                    local dx = relative_x - cam_x
+                    local dy = relative_y - cam_y
+                    local padding = 64
+                    if math.abs(dx) > (half_view_w + padding) or math.abs(dy) > (half_view_h + padding) then
+                        goto continue
+                    end
+                end
 
                 love.graphics.push()
                 love.graphics.translate(relative_x, relative_y)

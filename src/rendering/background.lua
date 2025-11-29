@@ -27,6 +27,10 @@ function Background.new(enableNebula)
 
     self.time = 0
 
+    if enableNebula == nil then
+        enableNebula = Config.BACKGROUND.ENABLE_NEBULA ~= false
+    end
+
     if enableNebula == false then
         self.nebulaShader = nil
     else
@@ -219,6 +223,12 @@ function Background:update(dt)
             end
         end
     end
+
+    self._nebulaAccumulator = (self._nebulaAccumulator or 0) + dt
+    if self._nebulaAccumulator >= 1 / 15 then
+        self._nebulaAccumulator = 0
+        self._nebulaDirty = true
+    end
 end
 
 function Background:draw(cam_x, cam_y, cam_sector_x, cam_sector_y)
@@ -235,7 +245,7 @@ function Background:draw(cam_x, cam_y, cam_sector_x, cam_sector_y)
     love.graphics.setColor(clear[1], clear[2], clear[3], clear[4])
     love.graphics.rectangle("fill", 0, 0, sw, sh)
 
-    if self.nebulaShader and self.nebulaParams then
+    if self.nebulaShader and self.nebulaParams and Config.BACKGROUND.ENABLE_NEBULA ~= false then
         love.graphics.setShader(self.nebulaShader)
         love.graphics.setColor(1, 1, 1, 1)
 
@@ -247,12 +257,10 @@ function Background:draw(cam_x, cam_y, cam_sector_x, cam_sector_y)
         self.nebulaShader:send("time", self.time or 0)
         self.nebulaShader:send("offset", { offset_x, offset_y })
         self.nebulaShader:send("resolution", { sw, sh })
-        self.nebulaShader:send("noiseScale", self.nebulaParams.noiseScale)
         self.nebulaShader:send("flow", self.nebulaParams.flow)
         self.nebulaShader:send("alphaScale", self.nebulaParams.alphaScale)
         self.nebulaShader:send("colorA", self.nebulaParams.colorA)
         self.nebulaShader:send("colorB", self.nebulaParams.colorB)
-        self.nebulaShader:send("distortion", self.nebulaParams.distortion or 0.2)
         self.nebulaShader:send("densityScale", self.nebulaParams.densityScale or 1.0)
 
         local patches = self.nebulaParams.patches or {
