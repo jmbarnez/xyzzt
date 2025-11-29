@@ -225,6 +225,10 @@ function PlayState:keypressed(key)
         return
     end
 
+    if key == "f" and self.world then
+        self:tryDockAtStation()
+        return
+    end
     if key == "tab" and self.world and self.world.ui then
         self.world.ui.cargo_open = not self.world.ui.cargo_open
         if not self.world.ui.cargo_open and self.world.ui.cargo_drag then
@@ -417,7 +421,7 @@ function PlayState:updateHover()
 
     local best, bestDist2
     for _, e in ipairs(self.world:getEntities()) do
-        if (e.asteroid or e.asteroid_chunk or e.vehicle) and e.transform and e.render then
+        if (e.asteroid or e.asteroid_chunk or e.vehicle or e.station) and e.transform and e.render then
             local sx, sy = (e.sector and e.sector.x or 0), (e.sector and e.sector.y or 0)
             
             if math.abs(sx - ship_sx) <= 1 and math.abs(sy - ship_sy) <= 1 then
@@ -435,6 +439,66 @@ function PlayState:updateHover()
         end
     end
     self.world.ui.hover_target = best
+end
+
+function PlayState:tryDockAtStation()
+    local world = self.world
+    if not (world and world.local_ship and world.ui and world.ui.hover_target) then
+        return
+    end
+
+    -- For now, only apply docking logic on hosts / single-player to avoid
+    -- desync with an authoritative server.
+    if Client.connected and not world.hosting then
+        return
+    end
+
+    local ship = world.local_ship
+    local target = world.ui.hover_target
+
+    if not (target.station and target.transform and target.sector and ship.transform and ship.sector) then
+        return
+    end
+
+    local ship_sx = ship.sector.x or 0
+    local ship_sy = ship.sector.y or 0
+    local target_sx = target.sector.x or 0
+    local target_sy = target.sector.y or 0
+
+    local ex = target.transform.x + (target_sx - ship_sx) * DefaultSector.SECTOR_SIZE
+    local ey = target.transform.y + (target_sy - ship_sy) * DefaultSector.SECTOR_SIZE
+
+    local dx = ex - ship.transform.x
+    local dy = ey - ship.transform.y
+    local dist = math.sqrt(dx * dx + dy * dy)
+
+    local dock_radius = (target.station_area and target.station_area.radius) or 0
+    if dock_radius <= 0 or dist > dock_radius then
+        return
+    end
+
+    -- Refill primary ship resources
+    if ship.hull and ship.hull.max then
+        ship.hull.current = ship.hull.max
+    end
+    if ship.shield and ship.shield.max then
+        ship.shield.current = ship.shield.max
+    end
+    if ship.energy and ship.energy.max then
+        ship.energy.current = ship.energy.max
+    end
+
+    -- Gently bring the ship to rest
+    if ship.physics and ship.physics.body then
+        ship.physics.body:setLinearVelocity(0, 0)
+        ship.physics.body:setAngularVelocity(0)
+    end
+
+    -- Floating text feedback at the station
+    local e = Concord.entity(world)
+    local text = "Docked: ship resupplied"
+    local color = { 0.3, 1.0, 0.6, 1.0 }
+    e:give("floating_text", text, ex, ey, 1.6, color)
 end
 
 function PlayState:respawnLocalPlayer()

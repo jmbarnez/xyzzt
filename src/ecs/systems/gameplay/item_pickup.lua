@@ -1,5 +1,6 @@
 local Concord = require "lib.concord.concord"
 local EntityUtils = require "src.utils.entity_utils"
+local FloatingTextSpawner = require "src.utils.floating_text_spawner"
 
 local ItemPickupSystem = Concord.system({
     pool = { "item", "physics" }
@@ -13,7 +14,7 @@ local ItemPickupSystem = Concord.system({
 -- This system might not even need an update loop if it's purely event driven.
 
 -- Helper function to process item collection
-local function collect_item(item, collector)
+local function collect_item(item, collector, world)
     if not (item and collector) then return end
 
     local itemComp = item.item
@@ -41,6 +42,10 @@ local function collect_item(item, collector)
                 end
 
                 print("Cargo: " .. cargo.current .. "/" .. cargo.capacity .. " Vol | Mass: " .. cargo.mass)
+
+				if world and collector.transform then
+					FloatingTextSpawner.spawn(world, "+1 " .. tostring(itemComp.name), collector.transform.x, collector.transform.y, {0, 1, 0, 1})
+				end
             else
                 print("Cargo full! (" .. cargo.current .. "/" .. cargo.capacity .. ")")
                 return
@@ -48,6 +53,9 @@ local function collect_item(item, collector)
         end
     else
         print("Picked up " .. tostring(itemComp.name))
+		if world and collector.transform then
+			FloatingTextSpawner.spawn(world, "+1 " .. tostring(itemComp.name), collector.transform.x, collector.transform.y, {0, 1, 0, 1})
+		end
     end
 
     -- Mark item as collected; actual physics cleanup happens in update
@@ -97,7 +105,7 @@ function ItemPickupSystem:update(dt)
                 -- Pickup radius (e.g. 30 units)
                 local pickup_radius = 30
                 if dist2 < (pickup_radius * pickup_radius) then
-                    collect_item(itemEntity, collector)
+					collect_item(itemEntity, collector, world)
                 else
                     -- Magnet Logic
                     if collector.magnet then

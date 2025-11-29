@@ -227,7 +227,10 @@ Concord.component("level_scaling", function(c, level)
     c.stat_multiplier = 1 + (level - 1) * 0.15 -- 15% per level
 end)
 
-Concord.component("station")
+Concord.component("station", function(c, description, services)
+    c.description = description or ""
+    c.services = services or nil
+end)
 
 Concord.component("station_area", function(c, radius)
     c.radius = radius or 200

@@ -36,7 +36,7 @@ function StationManager.spawn(world, station_def, x, y)
     })
 
     station:give("name", data.name or "Station")
-    station:give("station")
+    station:give("station", data.description, data.services)
     station:give("station_area", data.station_radius or data.radius * 2)
 
     return station

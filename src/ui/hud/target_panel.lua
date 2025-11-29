@@ -1,6 +1,7 @@
 local Theme = require "src.ui.theme"
 local HealthBar = require "src.ui.hud.health_bar"
 local HealthModel = require "src.ui.hud.health_model"
+local DefaultSector = require "src.data.default_sector"
 
 local TargetPanel = {}
 
@@ -14,11 +15,19 @@ function TargetPanel.draw(world, player)
         return
     end
 
+    local isStation = target.station ~= nil
+
     local sw, sh = love.graphics.getDimensions()
     local spacing = Theme.spacing
     local shapes = Theme.shapes
     local panelWidth = spacing.targetPanelWidth or 260
-    local panelHeight = spacing.targetPanelHeight or 64 -- Slightly taller to accommodate bar comfortably
+    local basePanelHeight = spacing.targetPanelHeight or 64 -- Base height for generic targets
+    local extraHeight = 0
+    if isStation then
+        -- Give stations a bit more vertical space for description/docking info
+        extraHeight = spacing.targetPanelStationExtraHeight or 32
+    end
+    local panelHeight = basePanelHeight + extraHeight
     local panelX = (sw - panelWidth) / 2
     local panelY = spacing.targetPanelOffsetY or 16
 
@@ -66,6 +75,44 @@ function TargetPanel.draw(world, player)
     local barHeight = spacing.targetPanelBarHeight or 12
     local barGap = spacing.targetPanelBarGap or 4
     local barY = cy + textHeight + 6
+
+    if isStation then
+        local infoY = cy + textHeight + 4
+
+        if target.station and target.station.description and target.station.description ~= "" then
+            love.graphics.setColor(Theme.colors.textMuted)
+            love.graphics.print(target.station.description, cx, infoY)
+            infoY = infoY + textHeight
+        end
+
+        local ship = world.local_ship
+        if ship and ship.transform and ship.sector and target.sector then
+            local ship_sx = ship.sector.x or 0
+            local ship_sy = ship.sector.y or 0
+            local target_sx = target.sector.x or 0
+            local target_sy = target.sector.y or 0
+
+            local ex = target.transform.x + (target_sx - ship_sx) * DefaultSector.SECTOR_SIZE
+            local ey = target.transform.y + (target_sy - ship_sy) * DefaultSector.SECTOR_SIZE
+
+            local dx = ex - ship.transform.x
+            local dy = ey - ship.transform.y
+            local dist = math.sqrt(dx * dx + dy * dy)
+
+            local dock_radius = (target.station_area and target.station_area.radius) or 0
+            local inRange = (dock_radius > 0 and dist <= dock_radius)
+
+            love.graphics.setColor(Theme.colors.textPrimary)
+            local distanceText = string.format("Distance: %.0f", dist)
+            if inRange then
+                distanceText = distanceText .. "   [F] Dock & Resupply"
+            end
+            love.graphics.print(distanceText, cx, infoY)
+            infoY = infoY + textHeight
+        end
+
+        barY = infoY + 4
+    end
 
     for _, bar in ipairs(bars) do
         HealthBar.draw(
